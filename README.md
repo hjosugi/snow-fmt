@@ -37,6 +37,7 @@ npm exec --package tree-sitter-cli@0.26.9 -- tree-sitter test
 | `SyntaxKind` ＋ `rowan` 連携 | ✅ |
 | Parser / CST（Pratt 式＋SELECT、ロスレス、エラー回復で無停止） | ✅ Phase 1–2 |
 | Formatter（Doc IR、`snow-fmt-formatter`、コメント付与あり） | ✅ Phase 3（壊れた SQL は無変換） |
+| フロー/パイプ `->>`（statement チェーン、`$n` 参照） | ✅ parse + 整形 |
 | 埋め込み JS 整形（Biome） | ⏳ Phase 8 |
 | ハイライト / Hover / LSP / Tree-sitter | ✅ lexical highlight + hover + Tree-sitter grammar / ⏳ LSP |
 

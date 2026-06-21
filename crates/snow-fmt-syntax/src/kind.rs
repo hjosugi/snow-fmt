@@ -255,6 +255,8 @@ pub enum SyntaxKind {
     JSON_ACCESS,
     VALUES_CLAUSE,
     VALUES_ROW,
+    // Snowflake flow/pipe operator: a chain of statements joined by `->>`.
+    FLOW_STMT,
 
     #[doc(hidden)]
     __LAST,

@@ -74,9 +74,10 @@
 ## Phase 5 — フロー/パイプ構文 `->>` ⏳ 🔎
 *目的: 既存ツールがほぼ未対応の差別化点。*
 - ✅ Lexer は Snowflake 公式 `->>` と互換 `|>` の両方を単一トークン化
-- ⏳ 🔎 flow operator の文脈（任意の SQL statement chain、`FROM $n` 参照、制限事項）を公式ドキュメントで継続確認
-- ⏳ 整形規則（`->>` ステップを1行ずつ、インデント揃え）
-- ⏳ パイプ／非パイプ混在の扱い
+- ✅ 🔎 flow operator を公式ドキュメントで確認（statement を `->>` で連結、`$n` は **FROM 句のみ**で直前 n 番目の結果を参照、末尾のみ `;`）。<https://docs.snowflake.com/en/sql-reference/operators-flow>
+- ✅ parser: `FLOW_STMT`（`single_statement (->> single_statement)*`）＋ `FROM $n` を受理
+- ✅ 整形規則（連結を1段インデント＋各ステップ行頭 `->> `、idempotent）
+- ⏳ チェーン内の SHOW/CREATE/INSERT 等（未パースの statement 種別。現状はそれらを含むと無変換パススルー）
 
 ## Phase 6 — DML ⏳
 - ⏳ `INSERT`（単一・`INSERT ALL`/`FIRST` の多テーブル）

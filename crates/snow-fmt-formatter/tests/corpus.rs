@@ -45,6 +45,10 @@ const CURATED: &[&str] = &[
     "select a from t where x = 1 -- pred\n and y = 2",
     "select 1;\n-- trailing file comment\n",
     "select a from t -- end\n",
+    // flow operator (->>)
+    "select a from t ->> select b from $1",
+    "select * from dept where d = 'x' ->> select * from emp where deptno in (select deptno from $1) ->> select e, s from $1 order by 2 desc",
+    "values (1), (2) ->> select column1 from $1",
 ];
 
 /// Meaningful tokens, upper-cased and with statement terminators dropped — the canonical form a

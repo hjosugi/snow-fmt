@@ -123,6 +123,31 @@ fn multiple_statements_each_terminated() {
     assert_format("select 1; select 2", "SELECT 1;\nSELECT 2;\n");
 }
 
+// ---- flow operator (->>) ----
+
+#[test]
+fn flow_chain_indents_each_step() {
+    // Snowflake's `->>` chains statements; `$1` references the previous step in the FROM clause.
+    assert_format(
+        "select a from t ->> select b from $1",
+        "SELECT a\nFROM t\n  ->> SELECT b\n  FROM $1;\n",
+    );
+}
+
+#[test]
+fn flow_chain_three_steps() {
+    assert_format(
+        "select c1 from raw ->> select c1 from $1 where c1 > 10 ->> select count(*) from $1",
+        "SELECT c1\n\
+         FROM raw\n  \
+           ->> SELECT c1\n  \
+           FROM $1\n  \
+           WHERE c1 > 10\n  \
+           ->> SELECT count(*)\n  \
+           FROM $1;\n",
+    );
+}
+
 // ---- options ----
 
 #[test]

@@ -111,6 +111,7 @@ impl Ctx<'_> {
                 .map(|c| self.lower(&c))
                 .unwrap_or_else(nil),
             WITH_QUERY => self.with_query(node),
+            FLOW_STMT => self.flow_stmt(node),
             SET_OP => self.set_op(node),
             SUBQUERY => self.subquery(node),
             VALUES_CLAUSE => self.values_clause(node),
@@ -206,6 +207,24 @@ impl Ctx<'_> {
             parts.push(hard_line());
             parts.push(self.lower(&clause));
         }
+        concat(parts)
+    }
+
+    /// `stmt ->> stmt ->> stmt` — the first statement at column 0, each chained statement on a new
+    /// line led by `->>` and indented one level.
+    fn flow_stmt(&self, node: &SyntaxNode) -> Doc {
+        let mut parts = Vec::new();
+        let mut chain = Vec::new();
+        for (i, stmt) in node.children().enumerate() {
+            if i == 0 {
+                parts.push(self.lower(&stmt));
+            } else {
+                chain.push(hard_line());
+                chain.push(text("->> "));
+                chain.push(self.lower(&stmt));
+            }
+        }
+        parts.push(indent(concat(chain)));
         concat(parts)
     }
 

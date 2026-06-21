@@ -43,7 +43,10 @@
    - ✅ `CAST(x AS t)` / `TRY_CAST(x AS t)` 関数形（`::` キャストと両対応）
    - ✅ セミ構造化パス `col:path.to.field`・`[idx]`・`::cast` 連鎖（`JSON_ACCESS`）
    - ✅ `VALUES (..),(..)`（文／サブクエリ／派生テーブル列別名 `AS v(c1,c2)` も）
-   - ⏳ **残**: パイプ構文 `|>`（**最新の演算子一覧を docs で要確認** → §5）。
+   - ✅ **フロー/パイプ `->>` 実装済み**（公式は `->>`、`|>` ではない。docs で確認: statement を `->>` で連結、
+     `$n` は直前 n 番目の結果を **FROM 句でのみ**参照）。parser: `statement` を `single_statement (->> single_statement)*`
+     に拡張し `FLOW_STMT` に包む／`FROM $1` を NAME_REF として受理（[grammar.rs](crates/snow-fmt-parser/src/grammar.rs)、
+     [tests/flow.rs](crates/snow-fmt-parser/tests/flow.rs)）。formatter: 連結を1段インデント＋各ステップ行頭 `->> `。
    - 実装メモ: 文法 [grammar.rs](crates/snow-fmt-parser/src/grammar.rs)、ノードは [kind.rs](crates/snow-fmt-syntax/src/kind.rs)
      の `__LAST` 直前に追加。キーワードを足したら [keyword.rs](crates/snow-fmt-syntax/src/keyword.rs) の match と
      KEYWORDS テストの両方を更新。各追加に網羅テスト。

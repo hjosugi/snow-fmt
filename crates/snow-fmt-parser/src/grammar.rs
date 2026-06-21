@@ -42,27 +42,43 @@ fn at_stmt_start(p: &Parser) -> bool {
 }
 
 fn statement(p: &mut Parser) {
+    // Snowflake flow operator: `stmt ->> stmt ->> stmt`. Parse one statement, then if a `->>`
+    // follows, wrap the run into a FLOW_STMT chain.
+    let Some(first) = single_statement(p) else {
+        return;
+    };
+    if !p.at(FLOW_PIPE) {
+        return;
+    }
+    let m = first.precede(p);
+    while p.eat(FLOW_PIPE) {
+        single_statement(p);
+    }
+    m.complete(p, FLOW_STMT);
+}
+
+fn single_statement(p: &mut Parser) -> Option<CompletedMarker> {
     if p.at(WITH_KW) {
-        with_query(p);
+        Some(with_query(p))
     } else if p.at(SELECT_KW)
         || p.at(VALUES_KW)
         || (p.at(L_PAREN) && (p.nth_at(1, SELECT_KW) || p.nth_at(1, WITH_KW)))
     {
-        query_expr(p);
+        query_expr(p)
     } else {
         let m = p.start();
         expr(p);
-        m.complete(p, EXPR_STMT);
+        Some(m.complete(p, EXPR_STMT))
     }
 }
 
 // ---- queries ----
 
-fn with_query(p: &mut Parser) {
+fn with_query(p: &mut Parser) -> CompletedMarker {
     let m = p.start();
     with_clause(p);
     query_expr(p);
-    m.complete(p, WITH_QUERY);
+    m.complete(p, WITH_QUERY)
 }
 
 fn with_clause(p: &mut Parser) {
@@ -231,6 +247,13 @@ fn table_ref(p: &mut Parser) {
     let m = p.start();
     if p.at(L_PAREN) {
         subquery(p); // derived table
+        table_alias(p);
+    } else if p.at(VARIABLE) {
+        // A flow-operator result reference, e.g. `FROM $1`. Wrap it as a NAME_REF so downstream
+        // tooling treats it like any other table name.
+        let v = p.start();
+        p.bump(VARIABLE);
+        v.complete(p, NAME_REF);
         table_alias(p);
     } else if p.at_name() {
         name_ref(p);
