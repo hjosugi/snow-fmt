@@ -395,21 +395,95 @@ fn table_ref(p: &mut Parser) {
     let m = p.start();
     if p.at(L_PAREN) {
         subquery(p); // derived table
-        table_alias(p);
     } else if p.at(VARIABLE) {
         // A flow-operator result reference, e.g. `FROM $1`. Wrap it as a NAME_REF so downstream
         // tooling treats it like any other table name.
         let v = p.start();
         p.bump(VARIABLE);
         v.complete(p, NAME_REF);
-        table_alias(p);
     } else if p.at_name() {
         name_ref(p);
-        table_alias(p);
     } else {
         p.error("expected a table reference");
+        m.complete(p, TABLE_REF);
+        return;
+    }
+    table_alias(p);
+    // PIVOT/UNPIVOT reshape the table, then the result can be aliased.
+    if p.at(PIVOT_KW) || p.at(UNPIVOT_KW) {
+        pivot_clause(p);
+        table_alias(p);
     }
     m.complete(p, TABLE_REF);
+}
+
+/// `PIVOT ( agg(col) FOR col IN (values | ANY | subquery) )` or
+/// `UNPIVOT [INCLUDE|EXCLUDE NULLS] ( value_col FOR name_col IN (col, col, …) )`.
+fn pivot_clause(p: &mut Parser) {
+    let m = p.start();
+    let is_unpivot = p.at(UNPIVOT_KW);
+    p.bump_any(); // PIVOT or UNPIVOT
+    if is_unpivot {
+        // Optional `INCLUDE NULLS` / `EXCLUDE NULLS` (INCLUDE/EXCLUDE are plain words).
+        if p.at_name() {
+            p.bump_any();
+        }
+        p.eat(NULLS_KW);
+    }
+    p.expect(L_PAREN);
+    if is_unpivot {
+        name(p); // measure (value) column
+        p.expect(FOR_KW);
+        name(p); // name column
+        p.expect(IN_KW);
+        if p.at(L_PAREN) {
+            column_list(p); // ( source_col, source_col, … )
+        } else {
+            p.error("expected '(' after IN");
+        }
+    } else {
+        expr(p); // aggregate, e.g. SUM(amount)
+        p.expect(FOR_KW);
+        name_ref(p); // pivot column
+        p.expect(IN_KW);
+        pivot_in(p);
+    }
+    p.expect(R_PAREN);
+    m.complete(p, PIVOT_CLAUSE);
+}
+
+/// The `IN ( … )` value source of a PIVOT: an explicit value list (each value optionally aliased
+/// with `[AS] name`), `ANY [ORDER BY …]`, or a subquery (dynamic pivot).
+fn pivot_in(p: &mut Parser) {
+    if !p.eat(L_PAREN) {
+        p.error("expected '(' after IN");
+        return;
+    }
+    if p.at(ANY_KW) {
+        p.bump(ANY_KW);
+        if p.at(ORDER_KW) {
+            order_by_clause(p);
+        }
+    } else if p.at(SELECT_KW) || p.at(WITH_KW) {
+        query_expr(p);
+    } else if !p.at(R_PAREN) {
+        pivot_value(p);
+        while p.eat(COMMA) {
+            if p.at(R_PAREN) {
+                break;
+            }
+            pivot_value(p);
+        }
+    }
+    p.expect(R_PAREN);
+}
+
+/// A pivot value with an optional alias: `'JAN'`, `'JAN' AS jan`, or `1 jan`.
+fn pivot_value(p: &mut Parser) {
+    expr(p);
+    if p.eat(AS_KW) || p.at_name() {
+        name(p);
+    }
 }
 
 fn table_alias(p: &mut Parser) {

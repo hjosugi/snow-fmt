@@ -239,6 +239,32 @@ fn embedded_formatter_left_alone_for_non_javascript() {
     );
 }
 
+// ---- PIVOT / UNPIVOT ----
+
+#[test]
+fn pivot_with_value_list_and_alias() {
+    assert_format(
+        "select * from monthly_sales pivot(sum(amount) for month in ('JAN','FEB','MAR')) as p",
+        "SELECT *\nFROM monthly_sales PIVOT(sum(amount) FOR month IN ('JAN', 'FEB', 'MAR')) AS p;\n",
+    );
+}
+
+#[test]
+fn unpivot_with_column_list() {
+    assert_format(
+        "select * from sales unpivot(amount for month in (jan, feb, mar))",
+        "SELECT *\nFROM sales UNPIVOT(amount FOR month IN (jan, feb, mar));\n",
+    );
+}
+
+#[test]
+fn pivot_any_keyword() {
+    assert_format(
+        "select * from t pivot(sum(x) for month in (any order by month))",
+        "SELECT *\nFROM t PIVOT(sum(x) FOR month IN (ANY ORDER BY month));\n",
+    );
+}
+
 // ---- options ----
 
 #[test]

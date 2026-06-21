@@ -77,6 +77,7 @@ pub enum SyntaxKind {
     LIMIT_KW,
     OFFSET_KW,
     FETCH_KW,
+    FOR_KW,
     TOP_KW,
     AS_KW,
     AND_KW,
@@ -257,6 +258,8 @@ pub enum SyntaxKind {
     VALUES_ROW,
     // Snowflake flow/pipe operator: a chain of statements joined by `->>`.
     FLOW_STMT,
+    // PIVOT ( agg(col) FOR col IN (...) ) / UNPIVOT ( col FOR col IN (...) ) on a table reference.
+    PIVOT_CLAUSE,
     // CREATE FUNCTION / PROCEDURE with an embedded-language body (Phase 8).
     CREATE_FUNCTION,
     PARAM_LIST,

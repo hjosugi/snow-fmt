@@ -66,7 +66,7 @@
 - ⏳ `QUALIFY`, ウィンドウ関数（`OVER`, `PARTITION BY`, フレーム `ROWS/RANGE … PRECEDING/FOLLOWING`）, `WINDOW`句
 - ⏳ セミ構造化アクセス（`col:path.to.field`, `[idx]`, `::type`, `OBJECT_CONSTRUCT`/`ARRAY_CONSTRUCT`）
 - ⏳ `LATERAL FLATTEN` / `TABLE(FLATTEN(...))`
-- ⏳ `PIVOT` / `UNPIVOT`
+- ✅ `PIVOT` / `UNPIVOT`（値リスト＋エイリアス `'JAN' AS jan`、`ANY [ORDER BY]`、動的 pivot サブクエリ、`UNPIVOT [INCLUDE|EXCLUDE NULLS]`。parser `PIVOT_CLAUSE`＋整形、idempotent）
 - ⏳ `GROUP BY ALL` / `CUBE` / `ROLLUP` / `GROUPING SETS`
 - ⏳ `SAMPLE`/`TABLESAMPLE`, `MATCH_RECOGNIZE`, `CONNECT BY`/`START WITH`
 - ⏳ 🔎 `ASOF JOIN`, Time Travel（`AT`/`BEFORE`）, `CHANGES`

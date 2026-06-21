@@ -55,6 +55,11 @@ const CURATED: &[&str] = &[
     "create or replace procedure p(n int) returns string language javascript strict as $$ return String(N); $$",
     "create secure function g() returns string language sql as 'select 1'",
     "create function py(x int) returns int language python runtime_version = '3.11' handler = 'main' as 'pass'",
+    // PIVOT / UNPIVOT
+    "select * from monthly_sales pivot(sum(amount) for month in ('JAN','FEB','MAR')) as p",
+    "select * from sales unpivot(amount for month in (jan, feb, mar))",
+    "select * from t pivot(sum(x) for month in (any order by month))",
+    "select dept from emp pivot(sum(sal) for mon in ('jan','feb')) p where dept is not null",
 ];
 
 /// Meaningful tokens, upper-cased and with statement terminators dropped — the canonical form a

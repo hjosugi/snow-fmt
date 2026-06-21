@@ -37,6 +37,12 @@
 
 設計の真実の源は **rowan CST**。tree-sitter は競合させず、エディタ向けの寛容・高速な認識層という役割分担。
 
+> **Phase 4 進行中**: ✅ `PIVOT`/`UNPIVOT`（値エイリアス・`ANY`・動的 pivot・`INCLUDE/EXCLUDE NULLS`、`PIVOT_CLAUSE`、
+> [grammar.rs](crates/snow-fmt-parser/src/grammar.rs) `pivot_clause`/`pivot_in`、[tests/pivot.rs](crates/snow-fmt-parser/tests/pivot.rs)）。
+> `FOR` を予約語化（`FOR_KW`、3箇所同期: kind.rs/keyword.rs match/KEYWORDS 配列）。**教訓**: 既存 fixture には
+> 高度な PIVOT（`'JAN' AS jan`/`UNPIVOT INCLUDE NULLS`）があり、半端実装だと `column_list` の無条件 `bump(L_PAREN)` で
+> パニックした → **新規 grammar の `bump` は必ず `at()` ガード**（「決して失敗しない」不変条件）。残: `CUBE`/`ROLLUP`/`GROUPING SETS`、`FLATTEN`、`MATCH_RECOGNIZE`、`SAMPLE`。
+
 ## 3. 翌朝の優先タスク（順番）
 1. **パーサ高頻度ギャップ** — ✅ **本セッションで実装済み**（[tests/phase2b.rs](crates/snow-fmt-parser/tests/phase2b.rs)）:
    - ✅ `CASE [x] WHEN .. THEN .. ELSE .. END`（`CASE_EXPR`/`CASE_WHEN`）

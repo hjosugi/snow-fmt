@@ -134,6 +134,7 @@ impl Ctx<'_> {
             FROM_CLAUSE => self.lower_from_clause(node),
             JOIN => self.join_node(node),
             TABLE_REF => self.table_ref(node),
+            PIVOT_CLAUSE => self.pivot_clause(node),
             WHERE_CLAUSE => self.prefixed_expr_clause(node, WHERE_KW),
             HAVING_CLAUSE => self.prefixed_expr_clause(node, HAVING_KW),
             QUALIFY_CLAUSE => self.prefixed_expr_clause(node, QUALIFY_KW),
@@ -551,6 +552,57 @@ impl Ctx<'_> {
                     parts.push(self.lower(&child));
                 }
                 _ => parts.push(self.lower(&child)),
+            }
+        }
+        concat(parts)
+    }
+
+    /// ` PIVOT(agg(col) FOR col IN (values))` / ` UNPIVOT(col FOR col IN (cols))`, rebuilt from
+    /// tokens: function-like `PIVOT(`/`UNPIVOT(` are tight, the operator `IN (` takes a space.
+    fn pivot_clause(&self, node: &SyntaxNode) -> Doc {
+        let mut parts = vec![text(" ")];
+        let mut prev_word = false;
+        let mut prev_was_operator_kw = false;
+        for element in node.children_with_tokens() {
+            if let Some(tok) = element.as_token() {
+                if tok.kind().is_trivia() {
+                    continue;
+                }
+                match tok.kind() {
+                    L_PAREN => {
+                        if prev_was_operator_kw {
+                            parts.push(text(" "));
+                        }
+                        parts.push(text("("));
+                        prev_word = false;
+                        prev_was_operator_kw = false;
+                    }
+                    R_PAREN => {
+                        parts.push(text(")"));
+                        prev_word = false;
+                        prev_was_operator_kw = false;
+                    }
+                    COMMA => {
+                        parts.push(text(", "));
+                        prev_word = false;
+                        prev_was_operator_kw = false;
+                    }
+                    _ => {
+                        if prev_word {
+                            parts.push(text(" "));
+                        }
+                        parts.push(text(self.token_text(tok)));
+                        prev_word = true;
+                        prev_was_operator_kw = matches!(tok.kind(), IN_KW | FOR_KW);
+                    }
+                }
+            } else if let Some(child) = element.as_node() {
+                if prev_word {
+                    parts.push(text(" "));
+                }
+                parts.push(self.lower(child));
+                prev_word = true;
+                prev_was_operator_kw = false;
             }
         }
         concat(parts)
