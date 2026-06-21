@@ -7,8 +7,8 @@
 
 ## 0. いまの状態（検証済み・緑）
 - `cargo build --workspace` … OK
-- `cargo test --workspace` … **全テストバイナリ ok（失敗 0）**
-- `cargo clippy --workspace --all-targets` … クリーン（前セッション報告 + 本セッション確認）
+- `cargo test --workspace` … **全テストバイナリ ok（149 passed / 0 failed）**。`snow-formatter`（Phase 3 v1）追加済み。
+- `cargo clippy --workspace --all-targets` … クリーン（本セッション確認）
 - `cargo test -p snow-fmt-syntax --features rowan` … OK
 - `tree-sitter-snowflake/` … `grammar.js` + `src/parser.c`（生成済み）+ `queries/` あり
 - **触ると壊れうるので、再開時はまず上記を再実行して緑を確認してから着手すること。**
@@ -26,6 +26,7 @@
 | `snow-fmt-syntax` | `SyntaxKind`・`keyword_kind`・`T!`・rowan `Language` | ✅ 中核 |
 | `snow-fmt-lexer` | ロスレス手書きレキサ（`->>`=FLOW_PIPE, `|>`, `::`, `$$..$$`, コメント3種, エスケープ） | ✅ 中核 |
 | `snow-fmt-parser` | イベント方式パーサ→rowan CST、Pratt 式、SELECT 一式/JOIN/サブクエリ/集合演算/CTE/述語/ウィンドウ。**決して失敗しない**・ロスレス | ✅ Phase 1–2 |
+| `snow-formatter` | CST→Doc IR（Wadler/Prettier 式 `group`/`indent`/`line`、自前エンジン）→幅対応プリンタ。SELECT 一式/JOIN/CTE/集合演算/CASE/ウィンドウ/semi-structured を整形。コメント・壊れた SQL は**安全に無変換**。**idempotent**・トークン保存をテストで担保 | ✅ Phase 3 v1 |
 | `snow-fmt-highlight` | CST/トークン分類（keyword/type/string/comment/operator/variable）を byte range 付きで。ロスレス検証 | ✅ 初期 |
 | `snow-fmt-hover` | ホバー情報（**rich 化はこれから** — §4 参照） | 🚧 雛形 |
 | `snow-fmt-tree-sitter` | エディタ用 tree-sitter grammar の Rust ラッパ（生成 C parser を build.rs でコンパイル） | 🚧 初期 |
@@ -37,18 +38,29 @@
 設計の真実の源は **rowan CST**。tree-sitter は競合させず、エディタ向けの寛容・高速な認識層という役割分担。
 
 ## 3. 翌朝の優先タスク（順番）
-1. **パーサの高頻度ギャップを埋める**（ユーザー明示・未対応。`spec/` でも `todo`）:
-   - `CASE [x] WHEN .. THEN .. ELSE .. END`（最頻出。`primary()` に追加。ノード `CASE_EXPR`/`CASE_WHEN`）
-   - `CAST(x AS t)` / `TRY_CAST(x AS t)` 関数形（`::` キャストは対応済み）
-   - セミ構造化パス `col:path.to.field`（`expr_bp` の後置に `COLON` を追加。ノード `JSON_ACCESS`）
-   - `VALUES (..),(..)`（`query_primary` と文として。ノード `VALUES_CLAUSE`/`VALUES_ROW`）
-   - パイプ構文 `|>`（**最新の演算子一覧を docs で要確認** → §5）
-   - 実装メモ: 文法は [crates/snow-fmt-parser/src/grammar.rs](crates/snow-fmt-parser/src/grammar.rs)、ノード追加は
-     [crates/snow-fmt-syntax/src/kind.rs](crates/snow-fmt-syntax/src/kind.rs)（`__LAST` の直前に追加 → キーワードを足したら
-     [keyword.rs](crates/snow-fmt-syntax/src/keyword.rs) の match と KEYWORDS テストの両方を更新）。各追加に網羅テスト。
-2. **Phase 3: フォーマッタ（最大の未実装中核）**。自前の汎用 Doc IR エンジン（biome/ruff の `FormatElement`
-   を模倣、`biome_formatter` 非依存）＋ 幅対応プリンタ。SELECT 整形・magic trailing comma・コメント付与。
-   idempotency（`format(format(x))==format(x)`）と reparse 等価のテスト。詳細は [docs/research/prior-art.md](docs/research/prior-art.md)。
+1. **パーサ高頻度ギャップ** — ✅ **本セッションで実装済み**（[tests/phase2b.rs](crates/snow-fmt-parser/tests/phase2b.rs)）:
+   - ✅ `CASE [x] WHEN .. THEN .. ELSE .. END`（`CASE_EXPR`/`CASE_WHEN`）
+   - ✅ `CAST(x AS t)` / `TRY_CAST(x AS t)` 関数形（`::` キャストと両対応）
+   - ✅ セミ構造化パス `col:path.to.field`・`[idx]`・`::cast` 連鎖（`JSON_ACCESS`）
+   - ✅ `VALUES (..),(..)`（文／サブクエリ／派生テーブル列別名 `AS v(c1,c2)` も）
+   - ⏳ **残**: パイプ構文 `|>`（**最新の演算子一覧を docs で要確認** → §5）。
+   - 実装メモ: 文法 [grammar.rs](crates/snow-fmt-parser/src/grammar.rs)、ノードは [kind.rs](crates/snow-fmt-syntax/src/kind.rs)
+     の `__LAST` 直前に追加。キーワードを足したら [keyword.rs](crates/snow-fmt-syntax/src/keyword.rs) の match と
+     KEYWORDS テストの両方を更新。各追加に網羅テスト。
+2. **Phase 3: フォーマッタ** — ✅ **v1 実装済み**（`snow-formatter`）。自前 Doc IR エンジン
+   （`group`/`indent`/`line`/`soft`/`hard`、break 伝播＋`fits`、`biome_formatter` 非依存）＋幅対応プリンタ
+   ＋ CST→Doc の SQL ルール（[sql.rs](crates/snow-formatter/src/sql.rs)）。**idempotency** とトークン保存を
+   コーパス（EASY_CASES + 厳選）で担保（[tests/corpus.rs](crates/snow-formatter/tests/corpus.rs)）。
+   公開 API は `format` / `format_with(FormatOptions{line_width,indent_width,keyword_case})`。
+   - ⏳ **残（次の増分、優先順）**:
+     a. **コメント付与**（leading/trailing/dangling、trailing は `line_suffix`）。現状は
+        **コメント有り・パースエラー有りの入力は無変換でパススルー**（[lib.rs](crates/snow-formatter/src/lib.rs)
+        の安全フォールバック）。これを外すのが最大の次タスク。Doc IR に `LineSuffix`/`IfBreak`/`BreakParent` を追加。
+     b. **埋め込み `$$…$$` JS** を `biome_js_formatter` で整形し再インデント（root 揃え）。
+     c. 型名・関数名のケーシング方針、未対応構文（PIVOT/UNPIVOT/FLATTEN 等）の専用ルール化（現状は verbatim フォールバック）。
+     d. `insta` スナップショット、`format-dev` 類の類似度コーパス・ゲート。
+   - 注: SQL は SELECT リスト等に**末尾カンマを許さない**ため、JS/Python の magic trailing comma は採用せず
+     （採用すると無効 SQL を生む）。折返しは幅駆動のみ。設計根拠は [docs/research/prior-art.md](docs/research/prior-art.md)。
 3. **rich hover**（§4）。
 4. tree-sitter の corpus テストと `queries/highlights.scm` 拡充。
 5. `spec/` を docs ソースで更新し直す（現状はキュレーションのシード）。

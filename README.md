@@ -29,14 +29,14 @@ npm exec --package tree-sitter-cli@0.26.9 -- tree-sitter test
 
 ## 状態
 
-開発初期。**Phase 0（基盤）完了** — ロスレス Lexer ＋構文種別 ＋テスト基盤まで。全体計画は **[ROADMAP.md](ROADMAP.md)** を参照。
+開発中。**Phase 0–3 まで実装** — ロスレス Lexer ＋ CST パーサ ＋ フォーマッタ v1。全体計画は **[ROADMAP.md](ROADMAP.md)** を参照。
 
 | 機能 | 状態 |
 | --- | --- |
 | ロスレス Lexer（`->>`, `\|>`, `::`, `$$…$$`, コメント3種, エスケープ） | ✅ |
 | `SyntaxKind` ＋ `rowan` 連携 | ✅ |
-| Parser / CST（Pratt 式＋SELECT、ロスレス、エラー回復で無停止） | ✅ Phase 1 |
-| Formatter（Doc IR） | ⏳ Phase 3 |
+| Parser / CST（Pratt 式＋SELECT、ロスレス、エラー回復で無停止） | ✅ Phase 1–2 |
+| Formatter（Doc IR、`snow-formatter`） | ✅ Phase 3 v1（コメント／壊れた SQL は無変換） |
 | 埋め込み JS 整形（Biome） | ⏳ Phase 8 |
 | ハイライト / Hover / LSP / Tree-sitter | ✅ lexical highlight + hover + Tree-sitter grammar / ⏳ LSP |
 
@@ -52,6 +52,7 @@ snow-fmt/
 │   │   ├── src/{token,lexer}.rs
 │   │   └── tests/corpus.rs   網羅・ファズ・不変条件テスト
 │   ├── snow-fmt-parser/   rowan CST parser
+│   ├── snow-formatter/    CST→Doc IR の幅対応プリンタ（フォーマッタ）
 │   ├── snow-fmt-highlight/ Lexical highlight token classification
 │   ├── snow-fmt-hover/    LSP/editor-ready hover text for types/procedures/tasks
 │   ├── snow-fmt-tree-sitter/ Rust bindings for the bundled Tree-sitter grammar
@@ -63,7 +64,7 @@ snow-fmt/
 └── docs/research/         既存プロジェクト調査（prior-art.md ほか）
 ```
 
-将来追加予定: `snow-fmt-formatter` / `snow-fmt-lsp`。
+将来追加予定: `snow-fmt-lsp`。
 
 ## 参加する
 
@@ -82,7 +83,7 @@ snow-fmt/
 
 - **言語**: Rust（高速・Biome エコシステム再利用のため）。
 - **構文木**: `rowan` によるロスレス CST（rust-analyzer と同方式）。
-- **フォーマッタ IR**: 自前の汎用 Doc エンジン（biome/ruff の `FormatElement` を模倣、`biome_formatter` 非依存）。SQL 規則は別レイヤに分離。**magic trailing comma** を看板機能に。
+- **フォーマッタ IR**: 自前の汎用 Doc エンジン（biome/ruff の `FormatElement` を模倣、`biome_formatter` 非依存、crate `snow-formatter`）。SQL 規則は別レイヤに分離。折返しは**幅駆動**（SQL は末尾カンマ不可のため magic trailing comma は不採用）。
 - **埋め込み JS**: delimiter-aware body token（現行 Snowflake は `$$…$$`）の本体のみ Biome の `biome_js_formatter` で整形し再インデント（解析不能時は verbatim）。
 - **ハイライト**: 自前パーサを真実の源に、LSP セマンティックトークンへ拡張。エディタ向け baseline として Tree-sitter grammar / queries を同梱。
 - **スタイル**: gofmt / zig fmt 流の opinionated・ほぼ設定なし（`line-length` 程度）。
