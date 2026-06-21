@@ -273,10 +273,14 @@ fn query_primary(p: &mut Parser) -> Option<CompletedMarker> {
         Some(subquery(p))
     } else if p.at(SELECT_KW) {
         Some(select_core(p))
+    } else if p.at(WITH_KW) {
+        // A CTE can introduce a nested query — e.g. a derived table `(WITH … SELECT …)` or
+        // `… IN (WITH … SELECT …)`.
+        Some(with_query(p))
     } else if p.at(VALUES_KW) {
         Some(values_clause(p))
     } else {
-        p.error("expected a query (SELECT, VALUES, or a parenthesized subquery)");
+        p.error("expected a query (SELECT, WITH, VALUES, or a parenthesized subquery)");
         None
     }
 }
@@ -836,12 +840,45 @@ fn expr_bp(p: &mut Parser, min_bp: u8) -> Option<CompletedMarker> {
         if lbp < min_bp {
             break;
         }
+        let is_comparison = (lbp, rbp) == BP_CMP;
         let m = lhs.precede(p);
         p.bump_any(); // the operator
-        expr_bp(p, rbp);
+                      // Quantified comparison: `<op> {ALL|ANY|SOME} (subquery|values)`, also `LIKE ANY (...)`.
+        if is_comparison && (p.at(ALL_KW) || p.at(ANY_KW) || p.at(SOME_KW)) {
+            p.bump_any(); // ALL / ANY / SOME
+            quantified_operand(p);
+        } else {
+            expr_bp(p, rbp);
+        }
         lhs = m.complete(p, BIN_EXPR);
     }
     Some(lhs)
+}
+
+/// The `( … )` right of a quantifier: a subquery (`> ALL (SELECT …)`) or a value list
+/// (`LIKE ANY ('a%', 'b%')`).
+fn quantified_operand(p: &mut Parser) {
+    if !p.at(L_PAREN) {
+        p.error("expected '(' after ALL/ANY/SOME");
+        return;
+    }
+    if p.nth_at(1, SELECT_KW) || p.nth_at(1, WITH_KW) || p.nth_at(1, L_PAREN) {
+        subquery(p);
+    } else {
+        let m = p.start();
+        p.bump(L_PAREN);
+        if !p.at(R_PAREN) {
+            expr(p);
+            while p.eat(COMMA) {
+                if p.at(R_PAREN) {
+                    break;
+                }
+                expr(p);
+            }
+        }
+        p.expect(R_PAREN);
+        m.complete(p, EXPR_LIST);
+    }
 }
 
 fn lhs(p: &mut Parser) -> Option<CompletedMarker> {

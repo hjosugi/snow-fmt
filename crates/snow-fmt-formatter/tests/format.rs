@@ -239,6 +239,43 @@ fn embedded_formatter_left_alone_for_non_javascript() {
     );
 }
 
+// ---- subqueries / CTEs / quantified ----
+
+#[test]
+fn quantified_comparison_with_subquery() {
+    assert_format(
+        "select a from t where a > all (select x from u)",
+        "SELECT a\nFROM t\nWHERE a > ALL (\n  SELECT x\n  FROM u\n);\n",
+    );
+}
+
+#[test]
+fn like_any_value_list_stays_inline() {
+    assert_format(
+        "select * from t where name like any ('a%','b%','c%')",
+        "SELECT *\nFROM t\nWHERE name LIKE ANY ('a%', 'b%', 'c%');\n",
+    );
+}
+
+#[test]
+fn multiple_ctes_indent_one_per_line() {
+    assert_format(
+        "with a as (select 1 as n), b as (select n+1 as m from a) select m from b",
+        "WITH\n  \
+           a AS (SELECT 1 AS n),\n  \
+           b AS (\n    SELECT n + 1 AS m\n    FROM a\n  )\n\
+         SELECT m\nFROM b;\n",
+    );
+}
+
+#[test]
+fn with_inside_a_derived_table() {
+    assert_format(
+        "select * from (with x as (select 1 as n) select n from x) y",
+        "SELECT *\nFROM (\n  WITH x AS (SELECT 1 AS n)\n  SELECT n\n  FROM x\n) y;\n",
+    );
+}
+
 // ---- GROUP BY extensions ----
 
 #[test]

@@ -37,6 +37,13 @@
 
 設計の真実の源は **rowan CST**。tree-sitter は競合させず、エディタ向けの寛容・高速な認識層という役割分担。
 
+> **複雑 subquery / CTE / 量化比較 を網羅対応・網羅テスト化**: スカラ/相関/派生表/IN/EXISTS、`> {ALL|ANY|SOME} (subquery)`・
+> `LIKE ANY (値)`（`SOME_KW` 追加、Pratt の比較で量化 RHS を分岐）、**ネスト WITH を全位置で**（`query_primary` が `WITH` を受理）、
+> set 演算混在、再帰 CTE+列リスト、深いネスト。WITH 整形は group 化（単一は同一行、複数/複数行は1段インデント）。
+> テストは [crates/snow-fmt-formatter/tests/subqueries.rs](crates/snow-fmt-formatter/tests/subqueries.rs)（61 ケース ×
+> {parse clean・idempotent・valid・token 保存}）＋ [parser/tests/subqueries.rs](crates/snow-fmt-parser/tests/subqueries.rs)。
+> **教訓（user 指摘）**: テストは「あらゆる組み合わせ」を総当たりで。新機能は position×shape のマトリクスで網羅プロパティテストを書く。
+
 > **Phase 4 進行中**: ✅ `PIVOT`/`UNPIVOT`（値エイリアス・`ANY`・動的 pivot・`INCLUDE/EXCLUDE NULLS`、`PIVOT_CLAUSE`、
 > [grammar.rs](crates/snow-fmt-parser/src/grammar.rs) `pivot_clause`/`pivot_in`、[tests/pivot.rs](crates/snow-fmt-parser/tests/pivot.rs)）。
 > `FOR` を予約語化（`FOR_KW`、3箇所同期: kind.rs/keyword.rs match/KEYWORDS 配列）。**教訓**: 既存 fixture には

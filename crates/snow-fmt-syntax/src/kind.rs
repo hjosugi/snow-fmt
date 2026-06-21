@@ -112,6 +112,7 @@ pub enum SyntaxKind {
     UNION_KW,
     ALL_KW,
     ANY_KW,
+    SOME_KW,
     EXCEPT_KW,
     INTERSECT_KW,
     MINUS_KW,

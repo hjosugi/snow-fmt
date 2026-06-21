@@ -398,18 +398,20 @@ impl Ctx<'_> {
     }
 
     fn with_clause(&self, node: &SyntaxNode) -> Doc {
-        let mut head = vec![self.kw("WITH"), text(" ")];
+        let mut head = vec![self.kw("WITH")];
         if self.has_token(node, RECURSIVE_KW) {
-            head.push(self.kw("RECURSIVE"));
             head.push(text(" "));
+            head.push(self.kw("RECURSIVE"));
         }
         let ctes: Vec<Doc> = node
             .children()
             .filter(|c| c.kind() == CTE)
             .map(|c| self.lower(&c))
             .collect();
-        head.push(join(concat(vec![text(","), hard_line()]), ctes));
-        concat(head)
+        // One CTE stays on the WITH line when it fits; several (or a multi-line one) each get their
+        // own indented line.
+        head.push(indent(concat(vec![line(), join(self.comma_line(), ctes)])));
+        group(concat(head))
     }
 
     fn cte(&self, node: &SyntaxNode) -> Doc {
