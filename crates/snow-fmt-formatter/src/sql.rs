@@ -161,6 +161,7 @@ impl Ctx<'_> {
             BIN_EXPR => self.bin_expr(node),
             CALL_EXPR => self.call_expr(node),
             ARG_LIST => self.arg_list(node),
+            NAMED_ARG => self.named_arg(node),
             INDEX_EXPR => self.index_expr(node),
             CAST_EXPR => self.cast_expr(node),
             CASE_EXPR => self.case_expr(node),
@@ -534,6 +535,11 @@ impl Ctx<'_> {
 
     fn table_ref(&self, node: &SyntaxNode) -> Doc {
         let mut parts = Vec::new();
+        // `LATERAL` is a leading modifier token (e.g. `LATERAL FLATTEN(input => x)`).
+        if self.has_token(node, LATERAL_KW) {
+            parts.push(self.kw("LATERAL"));
+            parts.push(text(" "));
+        }
         let mut saw_base = false;
         for child in node.children() {
             match child.kind() {
@@ -770,6 +776,14 @@ impl Ctx<'_> {
 
     fn arg_list(&self, node: &SyntaxNode) -> Doc {
         self.paren_list(self.child_nodes(node))
+    }
+
+    /// A named argument `name => value` (e.g. `FLATTEN(input => x)`).
+    fn named_arg(&self, node: &SyntaxNode) -> Doc {
+        let mut children = node.children();
+        let name = children.next().map(|n| self.lower(&n)).unwrap_or_else(nil);
+        let value = children.next().map(|n| self.lower(&n)).unwrap_or_else(nil);
+        concat(vec![name, text(" => "), value])
     }
 
     fn index_expr(&self, node: &SyntaxNode) -> Doc {

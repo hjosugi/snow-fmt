@@ -263,6 +263,8 @@ pub enum SyntaxKind {
     PIVOT_CLAUSE,
     // GROUP BY GROUPING SETS ( (..), (..), () ). CUBE/ROLLUP parse as ordinary call expressions.
     GROUPING_SETS,
+    // A named function argument: `input => expr` (FLATTEN, and Snowflake named args generally).
+    NAMED_ARG,
     // CREATE FUNCTION / PROCEDURE with an embedded-language body (Phase 8).
     CREATE_FUNCTION,
     PARAM_LIST,

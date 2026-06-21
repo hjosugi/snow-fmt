@@ -65,7 +65,7 @@
 *目的: 汎用 SQL フォーマッタが取りこぼす部分を制覇。*
 - ⏳ `QUALIFY`, ウィンドウ関数（`OVER`, `PARTITION BY`, フレーム `ROWS/RANGE … PRECEDING/FOLLOWING`）, `WINDOW`句
 - ⏳ セミ構造化アクセス（`col:path.to.field`, `[idx]`, `::type`, `OBJECT_CONSTRUCT`/`ARRAY_CONSTRUCT`）
-- ⏳ `LATERAL FLATTEN` / `TABLE(FLATTEN(...))`
+- ✅ `LATERAL FLATTEN` / `TABLE(FLATTEN(...))` / UDTF（テーブル関数を table_ref で。**名前付き引数 `input => x`**＝`NAMED_ARG`、予約語の引数名 input/outer/recursive も `=>` 先読みで受理。`f.value`/`f.key` 等は非予約。JOIN LATERAL も）
 - ✅ `PIVOT` / `UNPIVOT`（値リスト＋エイリアス `'JAN' AS jan`、`ANY [ORDER BY]`、動的 pivot サブクエリ、`UNPIVOT [INCLUDE|EXCLUDE NULLS]`。parser `PIVOT_CLAUSE`＋整形、idempotent）
 - ✅ `GROUP BY ALL` / `CUBE` / `ROLLUP` / `GROUPING SETS`（CUBE/ROLLUP/GROUPING() は非予約のまま call 式として通る。GROUPING SETS は `GROUPING_SETS` ノードで専用処理＝`GROUPING` を予約語化せず `GROUPING(x)` 関数を温存）
 - ⏳ `SAMPLE`/`TABLESAMPLE`, `MATCH_RECOGNIZE`, `CONNECT BY`/`START WITH`

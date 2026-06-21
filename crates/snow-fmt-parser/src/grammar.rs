@@ -397,18 +397,9 @@ fn from_clause(p: &mut Parser) {
 
 fn table_ref(p: &mut Parser) {
     let m = p.start();
-    if p.at(L_PAREN) {
-        subquery(p); // derived table
-    } else if p.at(VARIABLE) {
-        // A flow-operator result reference, e.g. `FROM $1`. Wrap it as a NAME_REF so downstream
-        // tooling treats it like any other table name.
-        let v = p.start();
-        p.bump(VARIABLE);
-        v.complete(p, NAME_REF);
-    } else if p.at_name() {
-        name_ref(p);
-    } else {
-        p.error("expected a table reference");
+    // `LATERAL` allows a table function / subquery to reference earlier FROM items.
+    p.eat(LATERAL_KW);
+    if !table_factor(p) {
         m.complete(p, TABLE_REF);
         return;
     }
@@ -419,6 +410,42 @@ fn table_ref(p: &mut Parser) {
         table_alias(p);
     }
     m.complete(p, TABLE_REF);
+}
+
+/// The base of a table reference: a derived table, a `$n` flow reference, or a table
+/// name — the last of which may be a table function call, e.g. `FLATTEN(input => x)` or
+/// `TABLE(FLATTEN(...))`. Returns `false` if nothing matched (so the caller can stop).
+fn table_factor(p: &mut Parser) -> bool {
+    if p.at(L_PAREN) {
+        subquery(p); // derived table
+    } else if p.at(VARIABLE) {
+        // A flow-operator result reference, e.g. `FROM $1`.
+        let v = p.start();
+        p.bump(VARIABLE);
+        v.complete(p, NAME_REF);
+    } else if p.at(FLATTEN_KW) || p.at(TABLE_KW) {
+        // A reserved-word table function: FLATTEN(...) / TABLE(...).
+        let n = p.start();
+        p.bump_any();
+        let callee = n.complete(p, NAME_REF);
+        if p.at(L_PAREN) {
+            let call = callee.precede(p);
+            arg_list(p);
+            call.complete(p, CALL_EXPR);
+        }
+    } else if p.at_name() {
+        let callee = name_ref(p);
+        // A plain name followed by `(` is a table function, e.g. `my_udtf(a, b)`.
+        if p.at(L_PAREN) {
+            let call = callee.precede(p);
+            arg_list(p);
+            call.complete(p, CALL_EXPR);
+        }
+    } else {
+        p.error("expected a table reference");
+        return false;
+    }
+    true
 }
 
 /// `PIVOT ( agg(col) FOR col IN (values | ANY | subquery) )` or
@@ -729,6 +756,7 @@ fn at_expr_start(p: &Parser) -> bool {
         || p.at(CASE_KW)
         || p.at(CAST_KW)
         || p.at(TRY_CAST_KW)
+        || p.at(FLATTEN_KW)
         || p.at_name()
 }
 
@@ -926,6 +954,12 @@ fn primary(p: &mut Parser) -> Option<CompletedMarker> {
         case_expr(p)
     } else if p.at(CAST_KW) || p.at(TRY_CAST_KW) {
         cast_fn_expr(p)
+    } else if p.at(FLATTEN_KW) {
+        // FLATTEN is reserved, but it is invoked like a function — `FLATTEN(input => x)`. Treat it
+        // as a callee so the postfix `(...)` makes a CALL_EXPR.
+        let m = p.start();
+        p.bump(FLATTEN_KW);
+        m.complete(p, NAME_REF)
     } else if p.at_name() {
         name_ref(p)
     } else {
@@ -991,6 +1025,16 @@ fn arg(p: &mut Parser) {
         let m = p.start();
         p.bump(STAR);
         m.complete(p, STAR_EXPR);
+    } else if p.nth_at(1, FAT_ARROW) {
+        // A named argument: `input => expr`. The name is often a reserved word (`input`, `outer`,
+        // `recursive`, …) so consume it as a NAME directly rather than via `name()`.
+        let m = p.start();
+        let nm = p.start();
+        p.bump_any();
+        nm.complete(p, NAME);
+        p.bump(FAT_ARROW);
+        expr(p);
+        m.complete(p, NAMED_ARG);
     } else if at_expr_start(p) {
         expr(p);
     } else {
