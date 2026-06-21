@@ -543,12 +543,62 @@ fn group_by_clause(p: &mut Parser) {
     if p.at(ALL_KW) {
         p.bump(ALL_KW);
     } else {
-        expr(p);
+        grouping_element(p);
         while p.eat(COMMA) {
-            expr(p);
+            grouping_element(p);
         }
     }
     m.complete(p, GROUP_BY_CLAUSE);
+}
+
+/// One GROUP BY element: `GROUPING SETS (…)`, or an ordinary expression. `CUBE(…)` / `ROLLUP(…)`
+/// fall through to `expr` and parse as call expressions (they aren't reserved words).
+fn grouping_element(p: &mut Parser) {
+    if p.at_word("grouping") && p.nth_word(1, "sets") {
+        grouping_sets(p);
+    } else {
+        expr(p);
+    }
+}
+
+/// `GROUPING SETS ( <set>, <set>, … )` where each set is `( expr, … )`, `()`, or a bare expr.
+fn grouping_sets(p: &mut Parser) {
+    let m = p.start();
+    p.bump_any(); // GROUPING (contextual)
+    p.bump_any(); // SETS (contextual)
+    p.expect(L_PAREN);
+    if !p.at(R_PAREN) {
+        grouping_set_item(p);
+        while p.eat(COMMA) {
+            if p.at(R_PAREN) {
+                break;
+            }
+            grouping_set_item(p);
+        }
+    }
+    p.expect(R_PAREN);
+    m.complete(p, GROUPING_SETS);
+}
+
+fn grouping_set_item(p: &mut Parser) {
+    if p.at(L_PAREN) {
+        // A parenthesized set `( a, b )` or the empty set `()`.
+        let m = p.start();
+        p.bump(L_PAREN);
+        if !p.at(R_PAREN) {
+            expr(p);
+            while p.eat(COMMA) {
+                if p.at(R_PAREN) {
+                    break;
+                }
+                expr(p);
+            }
+        }
+        p.expect(R_PAREN);
+        m.complete(p, EXPR_LIST);
+    } else {
+        expr(p);
+    }
 }
 
 fn having_clause(p: &mut Parser) {

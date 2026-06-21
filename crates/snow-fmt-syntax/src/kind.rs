@@ -260,6 +260,8 @@ pub enum SyntaxKind {
     FLOW_STMT,
     // PIVOT ( agg(col) FOR col IN (...) ) / UNPIVOT ( col FOR col IN (...) ) on a table reference.
     PIVOT_CLAUSE,
+    // GROUP BY GROUPING SETS ( (..), (..), () ). CUBE/ROLLUP parse as ordinary call expressions.
+    GROUPING_SETS,
     // CREATE FUNCTION / PROCEDURE with an embedded-language body (Phase 8).
     CREATE_FUNCTION,
     PARAM_LIST,

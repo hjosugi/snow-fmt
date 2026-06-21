@@ -239,6 +239,28 @@ fn embedded_formatter_left_alone_for_non_javascript() {
     );
 }
 
+// ---- GROUP BY extensions ----
+
+#[test]
+fn group_by_grouping_sets() {
+    assert_format(
+        "select a, sum(x) from t group by grouping sets ((a, b), (a), ())",
+        "SELECT a, sum(x)\nFROM t\nGROUP BY GROUPING SETS ((a, b), (a), ());\n",
+    );
+}
+
+#[test]
+fn group_by_cube_and_rollup_are_calls() {
+    assert_format(
+        "select a, sum(x) from t group by cube(a, b)",
+        "SELECT a, sum(x)\nFROM t\nGROUP BY cube(a, b);\n",
+    );
+    assert_format(
+        "select a, sum(x) from t group by rollup(a, b)",
+        "SELECT a, sum(x)\nFROM t\nGROUP BY rollup(a, b);\n",
+    );
+}
+
 // ---- PIVOT / UNPIVOT ----
 
 #[test]

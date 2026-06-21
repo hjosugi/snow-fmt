@@ -135,6 +135,7 @@ impl Ctx<'_> {
             JOIN => self.join_node(node),
             TABLE_REF => self.table_ref(node),
             PIVOT_CLAUSE => self.pivot_clause(node),
+            GROUPING_SETS => self.grouping_sets(node),
             WHERE_CLAUSE => self.prefixed_expr_clause(node, WHERE_KW),
             HAVING_CLAUSE => self.prefixed_expr_clause(node, HAVING_KW),
             QUALIFY_CLAUSE => self.prefixed_expr_clause(node, QUALIFY_KW),
@@ -606,6 +607,17 @@ impl Ctx<'_> {
             }
         }
         concat(parts)
+    }
+
+    /// `GROUPING SETS ((a, b), (c), ())`. Each set is an EXPR_LIST (`(a, b)` / `()`) or a bare expr.
+    fn grouping_sets(&self, node: &SyntaxNode) -> Doc {
+        let items = node.children().map(|c| self.lower(&c)).collect();
+        concat(vec![
+            self.kw("GROUPING SETS"),
+            text(" ("),
+            join(text(", "), items),
+            text(")"),
+        ])
     }
 
     // ---- clauses ----

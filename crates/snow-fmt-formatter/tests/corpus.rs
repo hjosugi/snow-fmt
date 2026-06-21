@@ -60,6 +60,11 @@ const CURATED: &[&str] = &[
     "select * from sales unpivot(amount for month in (jan, feb, mar))",
     "select * from t pivot(sum(x) for month in (any order by month))",
     "select dept from emp pivot(sum(sal) for mon in ('jan','feb')) p where dept is not null",
+    // GROUP BY extensions
+    "select a, sum(x) from t group by grouping sets ((a, b), (a), ())",
+    "select a from t group by a, grouping sets ((b), (c))",
+    "select a, sum(x) from t group by cube(a, b)",
+    "select grouping(a), sum(x) from t group by rollup(a, b)",
 ];
 
 /// Meaningful tokens, upper-cased and with statement terminators dropped — the canonical form a

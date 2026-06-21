@@ -67,7 +67,7 @@
 - ⏳ セミ構造化アクセス（`col:path.to.field`, `[idx]`, `::type`, `OBJECT_CONSTRUCT`/`ARRAY_CONSTRUCT`）
 - ⏳ `LATERAL FLATTEN` / `TABLE(FLATTEN(...))`
 - ✅ `PIVOT` / `UNPIVOT`（値リスト＋エイリアス `'JAN' AS jan`、`ANY [ORDER BY]`、動的 pivot サブクエリ、`UNPIVOT [INCLUDE|EXCLUDE NULLS]`。parser `PIVOT_CLAUSE`＋整形、idempotent）
-- ⏳ `GROUP BY ALL` / `CUBE` / `ROLLUP` / `GROUPING SETS`
+- ✅ `GROUP BY ALL` / `CUBE` / `ROLLUP` / `GROUPING SETS`（CUBE/ROLLUP/GROUPING() は非予約のまま call 式として通る。GROUPING SETS は `GROUPING_SETS` ノードで専用処理＝`GROUPING` を予約語化せず `GROUPING(x)` 関数を温存）
 - ⏳ `SAMPLE`/`TABLESAMPLE`, `MATCH_RECOGNIZE`, `CONNECT BY`/`START WITH`
 - ⏳ 🔎 `ASOF JOIN`, Time Travel（`AT`/`BEFORE`）, `CHANGES`
 

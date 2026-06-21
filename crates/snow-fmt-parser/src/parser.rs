@@ -86,6 +86,18 @@ impl<'a> Parser<'a> {
         }
     }
 
+    /// Is the current token an identifier with the given text (case-insensitive)? For *contextual*
+    /// words that must not become reserved keywords — e.g. `GROUPING SETS`, where `GROUPING` also
+    /// has to stay usable as the function `GROUPING(x)`.
+    pub(crate) fn at_word(&self, word: &str) -> bool {
+        self.nth(0) == SyntaxKind::IDENT && self.input.text(self.pos).eq_ignore_ascii_case(word)
+    }
+
+    /// Like [`Self::at_word`], but `n` tokens ahead.
+    pub(crate) fn nth_word(&self, n: usize, word: &str) -> bool {
+        self.nth(n) == SyntaxKind::IDENT && self.input.text(self.pos + n).eq_ignore_ascii_case(word)
+    }
+
     /// The kind to tag the current token with: a keyword kind if the raw `IDENT` is a keyword,
     /// otherwise the raw kind. Keeps keyword tokens correctly typed in the tree for highlighting.
     fn current_remapped(&self) -> SyntaxKind {
