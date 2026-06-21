@@ -257,6 +257,14 @@ pub enum SyntaxKind {
     VALUES_ROW,
     // Snowflake flow/pipe operator: a chain of statements joined by `->>`.
     FLOW_STMT,
+    // CREATE FUNCTION / PROCEDURE with an embedded-language body (Phase 8).
+    CREATE_FUNCTION,
+    PARAM_LIST,
+    PARAM,
+    RETURNS_CLAUSE,
+    LANGUAGE_CLAUSE,
+    FUNC_OPTION,
+    FUNC_BODY,
 
     #[doc(hidden)]
     __LAST,

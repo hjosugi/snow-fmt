@@ -38,7 +38,7 @@ pub(crate) fn source_file(p: &mut Parser) {
 }
 
 fn at_stmt_start(p: &Parser) -> bool {
-    p.at(SELECT_KW) || p.at(WITH_KW) || p.at(VALUES_KW) || at_expr_start(p)
+    p.at(SELECT_KW) || p.at(WITH_KW) || p.at(VALUES_KW) || p.at(CREATE_KW) || at_expr_start(p)
 }
 
 fn statement(p: &mut Parser) {
@@ -65,11 +65,159 @@ fn single_statement(p: &mut Parser) -> Option<CompletedMarker> {
         || (p.at(L_PAREN) && (p.nth_at(1, SELECT_KW) || p.nth_at(1, WITH_KW)))
     {
         query_expr(p)
+    } else if p.at(CREATE_KW) {
+        Some(create_function(p))
     } else {
         let m = p.start();
         expr(p);
         Some(m.complete(p, EXPR_STMT))
     }
+}
+
+// ---- CREATE FUNCTION / PROCEDURE (with embedded-language bodies) ----
+
+/// `CREATE [OR REPLACE] [modifiers] {FUNCTION|PROCEDURE} name (params) <options> AS <body>`.
+///
+/// The option region (RETURNS, LANGUAGE, STRICT, RUNTIME_VERSION = …, HANDLER = …, …) is parsed
+/// loosely: RETURNS and LANGUAGE get dedicated nodes (the formatter and highlighter need them),
+/// everything else becomes a generic FUNC_OPTION. The body after `AS` is captured verbatim.
+fn create_function(p: &mut Parser) -> CompletedMarker {
+    let m = p.start();
+    p.bump(CREATE_KW);
+    if p.eat(OR_KW) {
+        p.expect(REPLACE_KW);
+    }
+    while p.at(SECURE_KW) || p.at(TEMP_KW) || p.at(TEMPORARY_KW) || p.at(TRANSIENT_KW) {
+        p.bump_any();
+    }
+    if p.at(PROCEDURE_KW) {
+        p.bump(PROCEDURE_KW);
+    } else {
+        p.expect(FUNCTION_KW);
+    }
+    if p.at(IF_KW) {
+        p.bump(IF_KW);
+        p.eat(NOT_KW);
+        p.eat(EXISTS_KW);
+    }
+    if p.at_name() {
+        name_ref(p);
+    }
+    if p.at(L_PAREN) {
+        param_list(p);
+    }
+    while !p.at(AS_KW) && !p.at(SEMICOLON) && !p.at_eof() && !p.at(FLOW_PIPE) {
+        func_option(p);
+    }
+    if p.eat(AS_KW) {
+        func_body(p);
+    }
+    m.complete(p, CREATE_FUNCTION)
+}
+
+fn param_list(p: &mut Parser) {
+    let m = p.start();
+    p.bump(L_PAREN);
+    if !p.at(R_PAREN) {
+        param(p);
+        while p.eat(COMMA) {
+            if p.at(R_PAREN) {
+                break;
+            }
+            param(p);
+        }
+    }
+    p.expect(R_PAREN);
+    m.complete(p, PARAM_LIST);
+}
+
+fn param(p: &mut Parser) {
+    let m = p.start();
+    if p.at_name() {
+        name(p);
+    }
+    if p.at_name() {
+        type_name(p);
+    }
+    m.complete(p, PARAM);
+}
+
+fn func_option(p: &mut Parser) {
+    // `RETURNS <type>` is the return type; `RETURNS NULL ON NULL INPUT` is a null-handling flag.
+    if p.at(RETURNS_KW) && !p.nth_at(1, NULL_KW) {
+        returns_clause(p);
+    } else if p.at(LANGUAGE_KW) {
+        language_clause(p);
+    } else {
+        let m = p.start();
+        p.bump_any();
+        while !at_option_boundary(p) {
+            p.bump_any();
+        }
+        m.complete(p, FUNC_OPTION);
+    }
+}
+
+fn at_option_boundary(p: &Parser) -> bool {
+    p.at_eof()
+        || p.at(AS_KW)
+        || p.at(SEMICOLON)
+        || p.at(FLOW_PIPE)
+        || p.at(RETURNS_KW)
+        || p.at(LANGUAGE_KW)
+        || p.at(RUNTIME_VERSION_KW)
+        || p.at(PACKAGES_KW)
+        || p.at(IMPORTS_KW)
+        || p.at(HANDLER_KW)
+        || p.at(EXECUTE_KW)
+        || p.at(STRICT_KW)
+        || p.at(VOLATILE_KW)
+        || p.at(CALLED_KW)
+        || p.at(COPY_KW)
+}
+
+fn returns_clause(p: &mut Parser) {
+    let m = p.start();
+    p.bump(RETURNS_KW);
+    if p.at(TABLE_KW) {
+        p.bump(TABLE_KW); // RETURNS TABLE (col type, ...) for a UDTF
+        if p.at(L_PAREN) {
+            param_list(p);
+        }
+    } else {
+        type_name(p);
+        if p.eat(NOT_KW) {
+            p.eat(NULL_KW);
+        }
+    }
+    m.complete(p, RETURNS_CLAUSE);
+}
+
+fn language_clause(p: &mut Parser) {
+    let m = p.start();
+    p.bump(LANGUAGE_KW);
+    if p.at(JAVASCRIPT_KW)
+        || p.at(PYTHON_KW)
+        || p.at(JAVA_KW)
+        || p.at(SCALA_KW)
+        || p.at(SQL_KW)
+        || p.at_name()
+    {
+        p.bump_any();
+    } else {
+        p.error("expected a language after LANGUAGE");
+    }
+    m.complete(p, LANGUAGE_CLAUSE);
+}
+
+fn func_body(p: &mut Parser) {
+    let m = p.start();
+    if p.at(DOLLAR_STRING) || p.at(STRING) {
+        p.bump_any();
+    } else {
+        p.error("expected a function body ($$ ... $$ or a quoted string)");
+    }
+    m.complete(p, FUNC_BODY);
 }
 
 // ---- queries ----

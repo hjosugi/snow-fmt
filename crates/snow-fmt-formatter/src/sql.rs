@@ -23,14 +23,21 @@ use crate::builder::{
 };
 use crate::comments::Comments;
 use crate::doc::Doc;
-use crate::FormatOptions;
+use crate::{EmbeddedFormatter, FormatOptions};
 
-/// Lower a whole `SOURCE_FILE` into a single doc, attaching `src`'s comments to the tree.
-pub(crate) fn format_source(root: &SyntaxNode, src: &str, opts: &FormatOptions) -> Doc {
+/// Lower a whole `SOURCE_FILE` into a single doc, attaching `src`'s comments to the tree. An
+/// optional [`EmbeddedFormatter`] formats `$$ … $$` bodies (e.g. JavaScript UDFs).
+pub(crate) fn format_source(
+    root: &SyntaxNode,
+    src: &str,
+    opts: &FormatOptions,
+    embedded: Option<&dyn EmbeddedFormatter>,
+) -> Doc {
     let comments = Comments::build(root, src);
     Ctx {
         opts,
         comments: &comments,
+        embedded,
     }
     .source_file(root)
 }
@@ -38,6 +45,7 @@ pub(crate) fn format_source(root: &SyntaxNode, src: &str, opts: &FormatOptions) 
 struct Ctx<'a> {
     opts: &'a FormatOptions,
     comments: &'a Comments,
+    embedded: Option<&'a dyn EmbeddedFormatter>,
 }
 
 impl Ctx<'_> {
@@ -112,6 +120,12 @@ impl Ctx<'_> {
                 .unwrap_or_else(nil),
             WITH_QUERY => self.with_query(node),
             FLOW_STMT => self.flow_stmt(node),
+            CREATE_FUNCTION => self.create_function(node),
+            PARAM_LIST => self.param_list(node),
+            PARAM => self.spaced_pieces(node),
+            RETURNS_CLAUSE | LANGUAGE_CLAUSE => self.spaced_pieces(node),
+            FUNC_OPTION => self.verbatim(node),
+            FUNC_BODY => self.func_body(node),
             SET_OP => self.set_op(node),
             SUBQUERY => self.subquery(node),
             VALUES_CLAUSE => self.values_clause(node),
@@ -226,6 +240,103 @@ impl Ctx<'_> {
         }
         parts.push(indent(concat(chain)));
         concat(parts)
+    }
+
+    // ---- CREATE FUNCTION / PROCEDURE ----
+
+    /// `CREATE … FUNCTION name(params)` on the header line, each option clause (RETURNS, LANGUAGE,
+    /// …) on its own line, then `AS <body>`.
+    fn create_function(&self, node: &SyntaxNode) -> Doc {
+        let mut header_kws: Vec<Doc> = Vec::new();
+        let mut header_tail: Vec<Doc> = Vec::new();
+        let mut options: Vec<SyntaxNode> = Vec::new();
+        let mut body: Option<SyntaxNode> = None;
+        let mut in_options = false;
+
+        for element in node.children_with_tokens() {
+            if let Some(tok) = element.as_token() {
+                if tok.kind().is_trivia() || tok.kind() == AS_KW {
+                    continue;
+                }
+                // Prefix keywords (CREATE [OR REPLACE] [modifiers] FUNCTION [IF NOT EXISTS]).
+                if !in_options && tok.kind().is_keyword() {
+                    header_kws.push(text(self.token_text(tok)));
+                }
+            } else if let Some(child) = element.as_node() {
+                match child.kind() {
+                    NAME_REF => header_tail.push(concat(vec![text(" "), self.lower(child)])),
+                    PARAM_LIST => header_tail.push(self.lower(child)),
+                    RETURNS_CLAUSE | LANGUAGE_CLAUSE | FUNC_OPTION => {
+                        in_options = true;
+                        options.push(child.clone());
+                    }
+                    FUNC_BODY => body = Some(child.clone()),
+                    _ => {}
+                }
+            }
+        }
+
+        let mut parts = vec![concat(vec![join(text(" "), header_kws), concat(header_tail)])];
+        for opt in &options {
+            parts.push(hard_line());
+            parts.push(self.lower(opt));
+        }
+        if let Some(body) = &body {
+            parts.push(hard_line());
+            parts.push(self.kw("AS"));
+            parts.push(text(" "));
+            parts.push(self.lower(body));
+        }
+        concat(parts)
+    }
+
+    fn param_list(&self, node: &SyntaxNode) -> Doc {
+        self.paren_list(self.child_nodes(node))
+    }
+
+    /// The `$$ … $$` (or quoted) body. A JavaScript `$$` body is handed to the embedded formatter
+    /// when one is supplied; otherwise the body is emitted verbatim.
+    fn func_body(&self, node: &SyntaxNode) -> Doc {
+        let Some(tok) = self.tokens(node).into_iter().next() else {
+            return nil();
+        };
+        let raw = tok.text();
+        if tok.kind() == DOLLAR_STRING {
+            if let (Some(formatter), Some(language)) = (self.embedded, self.body_language(node)) {
+                if matches!(language.as_str(), "javascript" | "js") {
+                    if let Some(inner) = strip_dollar_quotes(raw) {
+                        if let Some(formatted) = formatter.format("javascript", inner) {
+                            return self.embedded_block(&formatted);
+                        }
+                    }
+                }
+            }
+        }
+        text(raw.to_string())
+    }
+
+    /// The `LANGUAGE` of the enclosing CREATE FUNCTION, lower-cased (e.g. `"javascript"`).
+    fn body_language(&self, body: &SyntaxNode) -> Option<String> {
+        let create = body.parent()?;
+        let lang = create.children().find(|c| c.kind() == LANGUAGE_CLAUSE)?;
+        // LANGUAGE <name>: the name is the token after the LANGUAGE keyword.
+        self.tokens(&lang)
+            .get(1)
+            .map(|t| t.text().to_ascii_lowercase())
+    }
+
+    /// Re-emit a formatted embedded body inside `$$ … $$`, indented one level under the statement.
+    fn embedded_block(&self, body: &str) -> Doc {
+        let lines: Vec<Doc> = body.lines().map(|line| text(line.to_string())).collect();
+        if lines.is_empty() {
+            return concat(vec![text("$$"), hard_line(), text("$$")]);
+        }
+        concat(vec![
+            text("$$"),
+            indent(concat(vec![hard_line(), join(hard_line(), lines)])),
+            hard_line(),
+            text("$$"),
+        ])
     }
 
     fn with_query(&self, node: &SyntaxNode) -> Doc {
@@ -861,6 +972,11 @@ impl Ctx<'_> {
     fn has_token(&self, node: &SyntaxNode, kind: SyntaxKind) -> bool {
         self.tokens(node).iter().any(|t| t.kind() == kind)
     }
+}
+
+/// The inner text of a `$$ … $$` dollar-quoted token, or `None` if it isn't well-delimited.
+fn strip_dollar_quotes(raw: &str) -> Option<&str> {
+    raw.strip_prefix("$$")?.strip_suffix("$$")
 }
 
 /// Canonical upper-case spelling for a generated clause keyword.
