@@ -157,6 +157,8 @@ pub fn keyword_kind(ident: &str) -> Option<SyntaxKind> {
         "matched" => MATCHED_KW,
         "drop" => DROP_KW,
         "alter" => ALTER_KW,
+        "within" => WITHIN_KW,
+        "for" => FOR_KW,
         _ => return None,
     })
 }
@@ -298,6 +300,8 @@ mod tests {
         ("matched", SyntaxKind::MATCHED_KW),
         ("drop", SyntaxKind::DROP_KW),
         ("alter", SyntaxKind::ALTER_KW),
+        ("within", SyntaxKind::WITHIN_KW),
+        ("for", SyntaxKind::FOR_KW),
     ];
 
     #[test]

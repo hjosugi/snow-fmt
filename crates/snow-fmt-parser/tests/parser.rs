@@ -32,6 +32,9 @@ fn lossless_roundtrip_valid_and_broken() {
         "CREATE TABLE t AS SELECT * FROM u",
         "DROP TABLE IF EXISTS db.s.t CASCADE",
         "ALTER TABLE t ADD COLUMN c INT",
+        "SELECT listagg(x, ',') WITHIN GROUP (ORDER BY x DESC) FROM t",
+        "SELECT * FROM t PIVOT (sum(amount) FOR month IN ('jan', 'feb')) AS p",
+        "SELECT * FROM sales UNPIVOT (amount FOR quarter IN (q1, q2))",
         "SELECT )( garbage @ # FROM", // deliberately broken
     ];
     for s in inputs {
@@ -49,6 +52,8 @@ fn clean_sql_has_no_errors() {
         "SELECT DISTINCT a FROM t",
         "SELECT count(DISTINCT x), array_agg(ALL y) FROM t",
         "SELECT listagg(DISTINCT x, ',') FROM t",
+        "SELECT listagg(x, ',') WITHIN GROUP (ORDER BY x) FROM t",
+        "SELECT count(grouping(a)) FROM t",
     ] {
         assert_parse_clean(s);
     }

@@ -196,6 +196,8 @@ pub enum SyntaxKind {
     MATCHED_KW,
     DROP_KW,
     ALTER_KW,
+    WITHIN_KW,
+    FOR_KW,
     #[doc(hidden)]
     __KW_END,
 
@@ -272,6 +274,9 @@ pub enum SyntaxKind {
     ALTER_STMT,
     COLUMN_DEF_LIST,
     COLUMN_DEF,
+    // Phase 4: Snowflake query extensions
+    WITHIN_GROUP,
+    PIVOT_CLAUSE,
 
     #[doc(hidden)]
     __LAST,

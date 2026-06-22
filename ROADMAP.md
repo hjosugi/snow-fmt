@@ -67,13 +67,14 @@
 - ✅ テスト: **stability-check（べき等 `format(format(x))==format(x)`）** ＋ ラウンドトリップ（有意トークン列の保存）＋ クリーン入力の再パース無エラー、内蔵 easy fixture 全 SQL で検証 … [tests/format.rs](crates/snow-fmt-formatter/tests/format.rs)。残: `insta` スナップショット
 - 📝 Phase 3 のスコープ境界: パーサが**完全に受理した入力のみ整形**し、`ParseError` が出る入力は無変更パススルー（無破壊・べき等を機械的に保証）。Phase 2 文法の拡張に従ってカバレッジが自動的に広がる
 
-## Phase 4 — Snowflake 固有のクエリ構文 ⏳
+## Phase 4 — Snowflake 固有のクエリ構文 🚧
 *目的: 汎用 SQL フォーマッタが取りこぼす部分を制覇。*
-- ⏳ `QUALIFY`, ウィンドウ関数（`OVER`, `PARTITION BY`, フレーム `ROWS/RANGE … PRECEDING/FOLLOWING`）, `WINDOW`句
-- ⏳ セミ構造化アクセス（`col:path.to.field`, `[idx]`, `::type`, `OBJECT_CONSTRUCT`/`ARRAY_CONSTRUCT`）
+- ✅ `QUALIFY`（Phase 2 で対応）, ウィンドウ関数（`OVER`, `PARTITION BY`, フレーム `ROWS/RANGE … PRECEDING/FOLLOWING`）, `WINDOW`句（フレームは Phase 2 で）。整形は当面インライン
+- ✅ セミ構造化アクセス（`col:path.to.field`=`JSON_ACCESS`, `[idx]`=`INDEX_EXPR`, `::type`=`CAST_EXPR`。Phase 1–2b で対応）。`OBJECT_CONSTRUCT`/`ARRAY_CONSTRUCT` は通常の関数呼び出しとして整形
+- ✅ **ordered-set 集約** `… WITHIN GROUP (ORDER BY …)`（`LISTAGG`/`ARRAY_AGG` 等。式の後置として `WITHIN_GROUP` ノード）… [grammar.rs](crates/snow-fmt-parser/src/grammar.rs) `expr_bp` / 新キーワード `WITHIN`
 - ⏳ `LATERAL FLATTEN` / `TABLE(FLATTEN(...))`
-- ⏳ `PIVOT` / `UNPIVOT`
-- ⏳ `GROUP BY ALL` / `CUBE` / `ROLLUP` / `GROUPING SETS`
+- ✅ `PIVOT` / `UNPIVOT`（`<table> PIVOT(<agg>(col) FOR col IN (…))` を `table_ref` の後置として `PIVOT_CLAUSE` ノードで対応）… [grammar.rs](crates/snow-fmt-parser/src/grammar.rs) `pivot_clause` / 新キーワード `FOR`
+- 🚧 `GROUP BY ALL`（✅）/ `CUBE` / `ROLLUP`（関数呼び出しとして整形可）/ `GROUPING SETS`（`GROUPING(col)` 関数とキーワード衝突のため text ベース判定が必要、未対応）
 - ⏳ `SAMPLE`/`TABLESAMPLE`, `MATCH_RECOGNIZE`, `CONNECT BY`/`START WITH`
 - ⏳ 🔎 `ASOF JOIN`, Time Travel（`AT`/`BEFORE`）, `CHANGES`
 

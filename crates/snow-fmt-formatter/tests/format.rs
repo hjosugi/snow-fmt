@@ -427,6 +427,26 @@ fn drop_statement_is_inline() {
 }
 
 #[test]
+fn within_group_aggregate_is_kept() {
+    assert_eq!(
+        fmt("select listagg(x, ',') within group (order by x) from t"),
+        "SELECT listagg(x, ',') WITHIN GROUP (ORDER BY x)\nFROM t;\n"
+    );
+}
+
+#[test]
+fn pivot_and_unpivot_are_kept() {
+    assert_eq!(
+        fmt("select * from t pivot (sum(amount) for month in ('jan', 'feb')) as p"),
+        "SELECT *\nFROM t PIVOT (sum(amount) FOR month IN ('jan', 'feb')) AS p;\n"
+    );
+    assert_eq!(
+        fmt("select * from sales unpivot (amount for quarter in (q1, q2))"),
+        "SELECT *\nFROM sales UNPIVOT (amount FOR quarter IN (q1, q2));\n"
+    );
+}
+
+#[test]
 fn group_by_all_stays_inline() {
     assert_eq!(
         fmt("select a from t group by all"),

@@ -494,14 +494,47 @@ fn table_ref(p: &mut Parser) {
     let m = p.start();
     if p.at(L_PAREN) {
         subquery(p); // derived table
-        table_alias(p);
     } else if p.at_name() {
         name_ref(p);
-        table_alias(p);
     } else {
         p.error("expected a table reference");
     }
+    // PIVOT / UNPIVOT apply to the table before its alias.
+    while p.at(PIVOT_KW) || p.at(UNPIVOT_KW) {
+        pivot_clause(p);
+    }
+    table_alias(p);
     m.complete(p, TABLE_REF);
+}
+
+fn pivot_clause(p: &mut Parser) {
+    let m = p.start();
+    let is_pivot = p.at(PIVOT_KW);
+    p.bump_any(); // PIVOT or UNPIVOT
+    p.expect(L_PAREN);
+    if is_pivot {
+        // PIVOT ( <agg>(col) FOR col IN ( value, ... ) )
+        expr(p);
+    } else {
+        // UNPIVOT ( value_col FOR name_col IN ( col, ... ) )
+        name_ref(p);
+    }
+    p.expect(FOR_KW);
+    name_ref(p);
+    p.expect(IN_KW);
+    p.expect(L_PAREN);
+    if !p.at(R_PAREN) {
+        expr(p);
+        while p.eat(COMMA) {
+            if p.at(R_PAREN) {
+                break;
+            }
+            expr(p);
+        }
+    }
+    p.expect(R_PAREN);
+    p.expect(R_PAREN);
+    m.complete(p, PIVOT_CLAUSE);
 }
 
 fn table_alias(p: &mut Parser) {
@@ -744,6 +777,19 @@ fn expr_bp(p: &mut Parser, min_bp: u8) -> Option<CompletedMarker> {
                 p.error("expected a window specification");
             }
             lhs = m.complete(p, WINDOW_EXPR);
+            continue;
+        }
+        // Ordered-set aggregates: `LISTAGG(x, ',') WITHIN GROUP (ORDER BY x)`.
+        if p.at(WITHIN_KW) {
+            let m = lhs.precede(p);
+            p.bump(WITHIN_KW);
+            p.expect(GROUP_KW);
+            p.expect(L_PAREN);
+            if p.at(ORDER_KW) {
+                order_by_clause(p);
+            }
+            p.expect(R_PAREN);
+            lhs = m.complete(p, WITHIN_GROUP);
             continue;
         }
 
