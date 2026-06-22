@@ -73,12 +73,15 @@ pub(crate) fn lower_source(root: &SyntaxNode, ctx: Ctx) -> Doc {
 /// could not be placed onto an emitted token — falls back to an exact verbatim copy.
 fn lower_stmt(stmt: &SyntaxNode, ctx: Ctx) -> Doc {
     let mut low = Lowerer::new(ctx, Comments::build(stmt));
-    let doc = match stmt.kind() {
+    // Hoist the statement's own leading comments above its first group, so a banner comment does
+    // not force the first construct (e.g. the SELECT list) to explode.
+    let prefix = low.statement_leading(stmt);
+    let body = match stmt.kind() {
         SELECT_STMT => low.lower_select(stmt),
         _ => low.lower_node(stmt),
     };
     if low.comments.all_placed() {
-        doc
+        concat(vec![prefix, body])
     } else {
         verbatim(stmt)
     }
@@ -219,6 +222,30 @@ impl Lowerer {
     fn reset(&mut self) {
         self.prev = None;
         self.prev_unary = false;
+    }
+
+    /// Remove and render the leading comments of the statement's first significant token, each on
+    /// its own line. Returned content is placed *before* the statement body (outside its groups) so
+    /// it does not force the first construct to break.
+    fn statement_leading(&mut self, stmt: &SyntaxNode) -> Doc {
+        let first = stmt
+            .descendants_with_tokens()
+            .filter_map(|el| el.into_token())
+            .find(|t| !t.kind().is_trivia());
+        let Some(token) = first else {
+            return empty();
+        };
+        let mut parts = Vec::new();
+        for comment in self
+            .comments
+            .leading
+            .remove(&offset(&token))
+            .unwrap_or_default()
+        {
+            parts.push(text(comment.text));
+            parts.push(hard_line());
+        }
+        concat(parts)
     }
 
     /// Emit a significant token together with any comments attached to it.

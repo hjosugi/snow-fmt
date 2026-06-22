@@ -266,6 +266,15 @@ fn leading_comment_sits_on_its_own_line() {
 }
 
 #[test]
+fn banner_comment_does_not_explode_the_select_list() {
+    // A statement-level leading comment is hoisted above the header group, so the list stays inline.
+    assert_eq!(
+        fmt("-- header\nselect a, b, c from t"),
+        "-- header\nSELECT a, b, c\nFROM t;\n"
+    );
+}
+
+#[test]
 fn trailing_line_comment_attaches_to_its_column() {
     // A `--` comment after a column (even after the comma) trails that column's line, and forces
     // the list to break so the comment ends its line.
