@@ -341,7 +341,7 @@ fn chained_set_operations_flatten() {
 fn insert_values_go_below_the_header() {
     assert_eq!(
         fmt("insert into t (a, b) values (1, 2), (3, 4)"),
-        "INSERT INTO t(a, b)\nVALUES (1, 2), (3, 4);\n"
+        "INSERT INTO t (a, b)\nVALUES (1, 2), (3, 4);\n"
     );
 }
 
@@ -534,7 +534,7 @@ fn semi_structured_path_keys_keep_their_case() {
 fn from_values_is_a_table_source() {
     assert_eq!(
         fmt("select c1 from values (1, 'a'), (2, 'b') as t(c1, c2)"),
-        "SELECT c1\nFROM VALUES (1, 'a'), (2, 'b') AS t(c1, c2);\n"
+        "SELECT c1\nFROM VALUES (1, 'a'), (2, 'b') AS t (c1, c2);\n"
     );
 }
 

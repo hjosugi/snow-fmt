@@ -28,7 +28,8 @@
 - ✅ ~~contextual keyword が IDENT 扱いで小文字のまま~~ → `CONTEXTUAL_KEYWORD` ソフトキーワードタグ（`bump_as`）で大文字化＋`KEYWORD (…)` スペーシング統一。予約はしない（識別子としてはそのまま）。
 - ✅ ~~`text_width` は char 数（CJK 幅が厳密でない）~~ → East Asian Width（TR11）で全角 2 幅に。
 - 寛容な balanced-paren 捕捉（`MATCH_RECOGNIZE`/`SAMPLE`/time travel/COPY）は未構造化＝長い1行。内部の `measures`/`pattern`/`define` 等は小文字のまま。
-- `insta` スナップショット未導入。`INSERT INTO t(cols)` の `(` 前スペースは関数呼び出し風（要否は方針次第）。
+- ✅ ~~`INSERT INTO t(cols)` の `(` 前スペース不統一~~ → 列名リスト（`COLUMN_LIST`）は常に前スペース（`INSERT INTO t (a, b)`／`AS t (c1, c2)`／`USING (a, b)`）、関数呼び出し `ARG_LIST` は密着のまま。`CREATE TABLE t (…)` と一致。
+- `insta` スナップショット未導入（exact-string テストで代替中）。
 - ※「コメントを含む文は丸ごと verbatim」は**誤り**だった: leading/trailing/inline コメントは通常経路で整形済み。verbatim はトークンに付与できない稀なコメントだけの安全網。
 
 ## 1. ゴール（ユーザー指示の要約）

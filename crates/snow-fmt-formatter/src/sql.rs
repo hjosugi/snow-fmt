@@ -572,7 +572,14 @@ impl Lowerer {
     /// are the node's child *nodes*; parentheses and commas are its tokens. An aggregate quantifier
     /// (`DISTINCT`/`ALL`) is a leading token of the list and is emitted just inside the `(`.
     fn lower_paren_list(&mut self, node: &SyntaxNode) -> Doc {
-        let open_sep = self.sep_before(L_PAREN);
+        // A column-name list (`INSERT INTO t (a, b)`, a derived-table alias `t (c1, c2)`, a `USING
+        // (a, b)`) attaches to the preceding name/keyword and always takes a leading space — unlike
+        // a call's `ARG_LIST`, which hugs its callee (`coalesce(a, b)`). Match `CREATE TABLE t (…)`.
+        let open_sep = if node.kind() == COLUMN_LIST && self.prev.is_some() {
+            space()
+        } else {
+            self.sep_before(L_PAREN)
+        };
         let trailing = paren_list_has_trailing_comma(node);
         let quantifier = node
             .children_with_tokens()
