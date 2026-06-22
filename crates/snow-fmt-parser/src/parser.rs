@@ -75,6 +75,13 @@ impl<'a> Parser<'a> {
         }
     }
 
+    /// Is the token `n` ahead a *contextual* keyword: a bare `IDENT` whose text matches `kw`
+    /// case-insensitively? Used for non-reserved words like `GROUPING`/`SETS` that must not become
+    /// real keywords (they double as the `GROUPING(col)` function and ordinary identifiers).
+    pub(crate) fn nth_contextual(&self, n: usize, kw: &str) -> bool {
+        self.nth(n) == SyntaxKind::IDENT && self.input.text(self.pos + n).eq_ignore_ascii_case(kw)
+    }
+
     /// Like [`Self::at`], but `n` tokens ahead — used for the handful of two-token decisions
     /// (`NOT IN`, `NOT LIKE`, `( SELECT`, ...).
     pub(crate) fn nth_at(&self, n: usize, kind: SyntaxKind) -> bool {

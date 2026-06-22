@@ -687,12 +687,56 @@ fn group_by_clause(p: &mut Parser) {
     if p.at(ALL_KW) {
         p.bump(ALL_KW);
     } else {
-        expr(p);
+        grouping_element(p);
         while p.eat(COMMA) {
-            expr(p);
+            grouping_element(p);
         }
     }
     m.complete(p, GROUP_BY_CLAUSE);
+}
+
+/// A `GROUP BY` element: `GROUPING SETS (...)`, or an ordinary expression (which already covers
+/// `CUBE(...)` / `ROLLUP(...)`, parsed as function calls).
+fn grouping_element(p: &mut Parser) {
+    if p.nth_contextual(0, "grouping") && p.nth_contextual(1, "sets") {
+        let m = p.start();
+        p.bump_any(); // GROUPING
+        p.bump_any(); // SETS
+        p.expect(L_PAREN);
+        if !p.at(R_PAREN) {
+            grouping_set(p);
+            while p.eat(COMMA) {
+                if p.at(R_PAREN) {
+                    break;
+                }
+                grouping_set(p);
+            }
+        }
+        p.expect(R_PAREN);
+        m.complete(p, GROUPING_SETS);
+    } else {
+        expr(p);
+    }
+}
+
+/// One set inside `GROUPING SETS`: a parenthesized (possibly empty) tuple of expressions, or a
+/// single bare expression.
+fn grouping_set(p: &mut Parser) {
+    if p.at(L_PAREN) {
+        p.bump(L_PAREN);
+        if !p.at(R_PAREN) {
+            expr(p);
+            while p.eat(COMMA) {
+                if p.at(R_PAREN) {
+                    break;
+                }
+                expr(p);
+            }
+        }
+        p.expect(R_PAREN);
+    } else {
+        expr(p);
+    }
 }
 
 fn having_clause(p: &mut Parser) {

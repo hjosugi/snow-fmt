@@ -74,7 +74,7 @@
 - ✅ **ordered-set 集約** `… WITHIN GROUP (ORDER BY …)`（`LISTAGG`/`ARRAY_AGG` 等。式の後置として `WITHIN_GROUP` ノード）… [grammar.rs](crates/snow-fmt-parser/src/grammar.rs) `expr_bp` / 新キーワード `WITHIN`
 - ⏳ `LATERAL FLATTEN` / `TABLE(FLATTEN(...))`
 - ✅ `PIVOT` / `UNPIVOT`（`<table> PIVOT(<agg>(col) FOR col IN (…))` を `table_ref` の後置として `PIVOT_CLAUSE` ノードで対応）… [grammar.rs](crates/snow-fmt-parser/src/grammar.rs) `pivot_clause` / 新キーワード `FOR`
-- 🚧 `GROUP BY ALL`（✅）/ `CUBE` / `ROLLUP`（関数呼び出しとして整形可）/ `GROUPING SETS`（`GROUPING(col)` 関数とキーワード衝突のため text ベース判定が必要、未対応）
+- ✅ `GROUP BY ALL` / `CUBE(...)` / `ROLLUP(...)`（関数呼び出しとして整形）/ `GROUPING SETS ((...), ...)`（`GROUPING(col)` 関数と衝突しない **contextual keyword**（text ベース判定）で `GROUPING_SETS` ノードに）… [grammar.rs](crates/snow-fmt-parser/src/grammar.rs) `grouping_element` / [parser.rs](crates/snow-fmt-parser/src/parser.rs) `nth_contextual`
 - ⏳ `SAMPLE`/`TABLESAMPLE`, `MATCH_RECOGNIZE`, `CONNECT BY`/`START WITH`
 - ⏳ 🔎 `ASOF JOIN`, Time Travel（`AT`/`BEFORE`）, `CHANGES`
 

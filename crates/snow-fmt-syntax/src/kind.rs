@@ -281,6 +281,7 @@ pub enum SyntaxKind {
     // Phase 8 / scripting-adjacent statements
     SET_STMT,
     EXECUTE_STMT,
+    GROUPING_SETS,
 
     #[doc(hidden)]
     __LAST,

@@ -60,6 +60,9 @@ fn clean_sql_has_no_errors() {
         "SELECT listagg(DISTINCT x, ',') FROM t",
         "SELECT listagg(x, ',') WITHIN GROUP (ORDER BY x) FROM t",
         "SELECT count(grouping(a)) FROM t",
+        "SELECT a FROM t GROUP BY GROUPING SETS ((a, b), (c), ())",
+        "SELECT a FROM t GROUP BY CUBE(a, b)",
+        "SELECT a FROM t GROUP BY ROLLUP(a), b",
     ] {
         assert_parse_clean(s);
     }

@@ -482,6 +482,18 @@ fn session_set_and_execute_immediate_format_inline() {
 }
 
 #[test]
+fn grouping_sets_and_cube_are_kept() {
+    assert_eq!(
+        fmt("select a, count(*) from t group by grouping sets ((a, b), (c), ())"),
+        "SELECT a, count(*)\nFROM t\nGROUP BY grouping sets((a, b), (c), ());\n"
+    );
+    assert_eq!(
+        fmt("select a from t group by cube(a, b)"),
+        "SELECT a\nFROM t\nGROUP BY cube(a, b);\n"
+    );
+}
+
+#[test]
 fn group_by_all_stays_inline() {
     assert_eq!(
         fmt("select a from t group by all"),
