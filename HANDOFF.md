@@ -24,11 +24,12 @@
 - **コーパス clean パース 0 → 38 / 77**（残りは安全に無変更パススルー）。
 
 ### 既知の技術的負債（次のリファクタ対象）
-- `Lowerer`（[sql.rs](crates/snow-fmt-formatter/src/sql.rs)）に `lower_select/insert/merge/copy/create/case…` の特殊ケースが増殖 → データ駆動/共通化の余地。
-- 寛容な balanced-paren 捕捉（`MATCH_RECOGNIZE`/`SAMPLE`/time travel/COPY）は未構造化＝長い1行。
-- contextual keyword（`asof`/`at`/`match_condition`）が IDENT 扱いで小文字のまま（大文字化と不統一）。
-- コメントを含む文は丸ごと verbatim（再整形しない）。
-- `insta` スナップショット未導入。`text_width` は char 数（CJK 幅が厳密でない）。`INSERT INTO t(cols)` の `(` 前スペース不統一。
+- ✅ ~~`Lowerer` に `lower_insert/merge/copy/create…` の特殊ケースが増殖~~ → 単一の `lower_clausal` に統合済み。
+- ✅ ~~contextual keyword が IDENT 扱いで小文字のまま~~ → `CONTEXTUAL_KEYWORD` ソフトキーワードタグ（`bump_as`）で大文字化＋`KEYWORD (…)` スペーシング統一。予約はしない（識別子としてはそのまま）。
+- ✅ ~~`text_width` は char 数（CJK 幅が厳密でない）~~ → East Asian Width（TR11）で全角 2 幅に。
+- 寛容な balanced-paren 捕捉（`MATCH_RECOGNIZE`/`SAMPLE`/time travel/COPY）は未構造化＝長い1行。内部の `measures`/`pattern`/`define` 等は小文字のまま。
+- `insta` スナップショット未導入。`INSERT INTO t(cols)` の `(` 前スペースは関数呼び出し風（要否は方針次第）。
+- ※「コメントを含む文は丸ごと verbatim」は**誤り**だった: leading/trailing/inline コメントは通常経路で整形済み。verbatim はトークンに付与できない稀なコメントだけの安全網。
 
 ## 1. ゴール（ユーザー指示の要約）
 - **最高の Snowflake SQL 解析器**を作る。最新の論文・実装も参照し「完璧な解析」を目指す。

@@ -168,10 +168,39 @@ struct Cmd<'a> {
     doc: &'a Doc,
 }
 
-/// Approximate display width of a string. Uses Unicode scalar count, which is exact for the ASCII
-/// and most BMP text SQL uses; wide-CJK double-width handling can refine this later if needed.
+/// Display width of a string in terminal columns: the sum of each character's column width, so a
+/// line of CJK text is measured by how wide it actually renders, not by its scalar count. This only
+/// feeds the fit/break decision, so refining it never changes which tokens are emitted.
 fn text_width(s: &str) -> usize {
-    s.chars().count()
+    s.chars().map(char_width).sum()
+}
+
+/// Column width of a single character: `2` for East Asian Wide / Fullwidth code points (per Unicode
+/// Annex #11 — CJK ideographs, kana, Hangul syllables, fullwidth forms, most emoji), `1` otherwise.
+/// Combining marks are not special-cased (rare in SQL), so this is an upper bound there.
+fn char_width(c: char) -> usize {
+    let cp = c as u32;
+    let wide = matches!(cp,
+        0x1100..=0x115F   // Hangul Jamo
+        | 0x2E80..=0x303E // CJK radicals, Kangxi, CJK symbols & punctuation
+        | 0x3041..=0x33FF // Hiragana, Katakana, Bopomofo, CJK compat
+        | 0x3400..=0x4DBF // CJK Unified Ideographs Extension A
+        | 0x4E00..=0x9FFF // CJK Unified Ideographs
+        | 0xA000..=0xA4CF // Yi syllables
+        | 0xAC00..=0xD7A3 // Hangul syllables
+        | 0xF900..=0xFAFF // CJK compatibility ideographs
+        | 0xFE10..=0xFE19 // vertical forms
+        | 0xFE30..=0xFE6F // CJK compatibility & small form variants
+        | 0xFF00..=0xFF60 // fullwidth forms
+        | 0xFFE0..=0xFFE6 // fullwidth signs
+        | 0x1F300..=0x1FAFF // symbols, pictographs & emoji (wide)
+        | 0x20000..=0x3FFFD // supplementary ideographic planes
+    );
+    if wide {
+        2
+    } else {
+        1
+    }
 }
 
 /// Does `doc` contain a hard line anywhere within (propagating through nested groups, exactly like
@@ -392,6 +421,17 @@ mod tests {
     fn text_and_concat() {
         let doc = concat(vec![text("a"), space(), text("b")]);
         assert_eq!(p(&doc, 80), "a b\n");
+    }
+
+    #[test]
+    fn cjk_text_is_measured_double_width() {
+        assert_eq!(text_width("abc"), 3);
+        assert_eq!(text_width("長芋"), 4); // two wide chars
+        assert_eq!(text_width("a長"), 3); // mixed
+                                          // Flat width is 長(2) + space(1) + 芋(2) = 5: fits at 5, breaks at 4.
+        let doc = group(concat(vec![text("長"), line(), text("芋")]));
+        assert_eq!(p(&doc, 4), "長\n芋\n");
+        assert_eq!(p(&doc, 5), "長 芋\n");
     }
 
     #[test]
