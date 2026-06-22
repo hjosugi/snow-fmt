@@ -125,6 +125,14 @@ impl<'a> Parser<'a> {
         self.advance(kind);
     }
 
+    /// Consume the current token, tagging it with `kind` regardless of its keyword-ness. Used for
+    /// positions where a keyword-spelled word is really a plain identifier (e.g. a case-sensitive
+    /// semi-structured path key like `payload:order`), so it is not later up-cased as a keyword.
+    pub(crate) fn bump_as(&mut self, kind: SyntaxKind) {
+        debug_assert!(!self.at_eof(), "bump_as past end of input");
+        self.advance(kind);
+    }
+
     /// Consume the current token, asserting it is `kind` (used after an `at` check).
     pub(crate) fn bump(&mut self, kind: SyntaxKind) {
         debug_assert!(self.at(kind), "bump({kind:?}) but not at it");

@@ -514,6 +514,31 @@ fn lateral_flatten_and_table_function_format() {
 }
 
 #[test]
+fn is_distinct_from_is_kept() {
+    assert_eq!(
+        fmt("select * from t where a is distinct from b and c is not distinct from d"),
+        "SELECT *\nFROM t\nWHERE a IS DISTINCT FROM b AND c IS NOT DISTINCT FROM d;\n"
+    );
+}
+
+#[test]
+fn semi_structured_path_keys_keep_their_case() {
+    // `order` is a keyword but here it is a case-sensitive JSON key — it must not be up-cased.
+    assert_eq!(
+        fmt("select payload:order:status::string from t"),
+        "SELECT payload:order:status::string\nFROM t;\n"
+    );
+}
+
+#[test]
+fn from_values_is_a_table_source() {
+    assert_eq!(
+        fmt("select c1 from values (1, 'a'), (2, 'b') as t(c1, c2)"),
+        "SELECT c1\nFROM VALUES (1, 'a'), (2, 'b') AS t(c1, c2);\n"
+    );
+}
+
+#[test]
 fn group_by_all_stays_inline() {
     assert_eq!(
         fmt("select a from t group by all"),

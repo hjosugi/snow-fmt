@@ -590,6 +590,8 @@ fn table_ref(p: &mut Parser) {
     p.eat(LATERAL_KW); // LATERAL FLATTEN(...) / LATERAL (subquery)
     if p.at(L_PAREN) {
         subquery(p); // derived table
+    } else if p.at(VALUES_KW) {
+        values_clause(p); // FROM VALUES (...), (...) [AS t(c1, c2)]
     } else if p.at(FLATTEN_KW) || p.at(TABLE_KW) {
         // Keyword-named table function: FLATTEN(...) / TABLE(...).
         p.bump_any();
@@ -1104,7 +1106,12 @@ fn primary(p: &mut Parser) -> Option<CompletedMarker> {
 }
 
 fn is_rhs(p: &mut Parser) {
-    if p.at(NULL_KW) || p.at(TRUE_KW) || p.at(FALSE_KW) {
+    if p.at(DISTINCT_KW) {
+        // `a IS [NOT] DISTINCT FROM b`
+        p.bump(DISTINCT_KW);
+        p.expect(FROM_KW);
+        expr_bp(p, BP_CMP.1);
+    } else if p.at(NULL_KW) || p.at(TRUE_KW) || p.at(FALSE_KW) {
         let m = p.start();
         p.bump_any();
         m.complete(p, LITERAL);
@@ -1308,7 +1315,11 @@ fn json_path(p: &mut Parser) {
 }
 
 fn json_path_segment(p: &mut Parser) {
-    if p.at_name() || p.at(STRING) {
+    // A path key may be any bare word, including one that spells a keyword (`payload:order`). Tag it
+    // as a plain IDENT so its case is preserved — semi-structured keys are case-sensitive.
+    if p.at_ident_like() {
+        p.bump_as(IDENT);
+    } else if p.at(STRING) {
         p.bump_any();
     } else {
         p.error("expected a path segment after ':'");
