@@ -344,30 +344,38 @@ impl Lowerer {
         doc
     }
 
-    /// A statement laid out as a header line followed by clause "blocks", each on its own line.
-    /// Header tokens/nodes are emitted inline; nodes whose kind is a `block` go below, one per line.
-    fn lower_blocky(&mut self, node: &SyntaxNode, is_block: impl Fn(SyntaxKind) -> bool) -> Doc {
-        let mut header = Vec::new();
-        let mut blocks = Vec::new();
+    /// The shared shape of every multi-clause statement: walk children in order, emit the header
+    /// inline, and put each clause on its own line. `break_token` marks tokens that *introduce* a
+    /// clause (e.g. `FROM`/`USING`/`ON`/`ELSE`) and start a new line; `block_node` marks clause
+    /// *nodes* that get their own line (rendered via [`Self::lower_query`], so a bare `SELECT`
+    /// source is structured). Everything else is part of the header. Node kinds with bespoke inline
+    /// rendering (a verbatim stage location, a spaced column-def list) own that in [`Self::lower_node`].
+    fn lower_clausal(
+        &mut self,
+        node: &SyntaxNode,
+        break_token: impl Fn(SyntaxKind) -> bool,
+        block_node: impl Fn(SyntaxKind) -> bool,
+    ) -> Doc {
+        let mut parts = Vec::new();
         for child in node.children_with_tokens() {
             if let Some(token) = child.as_token() {
                 if token.kind().is_trivia() {
                     continue;
                 }
-                header.push(self.token(token));
-            } else if let Some(node) = child.into_node() {
-                if is_block(node.kind()) {
-                    blocks.push(node);
+                if break_token(token.kind()) {
+                    parts.push(hard_line());
+                    self.reset();
+                }
+                parts.push(self.token(token));
+            } else if let Some(node) = child.as_node() {
+                if block_node(node.kind()) {
+                    parts.push(hard_line());
+                    self.reset();
+                    parts.push(self.lower_query(node));
                 } else {
-                    header.push(self.lower_node(&node));
+                    parts.push(self.lower_node(node));
                 }
             }
-        }
-        let mut parts = vec![concat(header)];
-        for block in blocks {
-            parts.push(hard_line());
-            self.reset();
-            parts.push(self.lower_query(&block));
         }
         concat(parts)
     }
@@ -375,133 +383,72 @@ impl Lowerer {
     /// Single-table `INSERT INTO t [(cols)]` with the `VALUES`/query below, or a multi-table
     /// `INSERT {ALL|FIRST}` with each `WHEN`/`INTO`/`ELSE` and the source query on their own lines.
     fn lower_insert(&mut self, node: &SyntaxNode) -> Doc {
-        let mut parts = Vec::new();
-        for child in node.children_with_tokens() {
-            if let Some(token) = child.as_token() {
-                if token.kind().is_trivia() {
-                    continue;
-                }
-                if token.kind() == ELSE_KW {
-                    parts.push(hard_line());
-                    self.reset();
-                }
-                parts.push(self.token(token)); // INSERT, OVERWRITE, ALL/FIRST, INTO (single)
-            } else if let Some(node) = child.as_node() {
-                match node.kind() {
-                    INSERT_WHEN | INTO_CLAUSE => {
-                        parts.push(hard_line());
-                        self.reset();
-                        parts.push(self.lower_node(node));
-                    }
-                    VALUES_CLAUSE | SELECT_STMT | SET_OP | SUBQUERY | WITH_QUERY => {
-                        parts.push(hard_line());
-                        self.reset();
-                        parts.push(self.lower_query(node));
-                    }
-                    _ => parts.push(self.lower_node(node)), // NAME_REF / COLUMN_LIST header (single)
-                }
-            }
-        }
-        concat(parts)
+        self.lower_clausal(
+            node,
+            |k| k == ELSE_KW,
+            |k| {
+                matches!(
+                    k,
+                    INSERT_WHEN
+                        | INTO_CLAUSE
+                        | VALUES_CLAUSE
+                        | SELECT_STMT
+                        | SET_OP
+                        | SUBQUERY
+                        | WITH_QUERY
+                )
+            },
+        )
     }
 
     /// `UPDATE t` then `SET ...`, `FROM ...`, `WHERE ...` each on its own line.
     fn lower_update(&mut self, node: &SyntaxNode) -> Doc {
-        self.lower_blocky(node, |k| {
-            matches!(k, SET_CLAUSE | FROM_CLAUSE | WHERE_CLAUSE)
-        })
+        self.lower_clausal(
+            node,
+            |_| false,
+            |k| matches!(k, SET_CLAUSE | FROM_CLAUSE | WHERE_CLAUSE),
+        )
     }
 
     /// `DELETE FROM t [USING ...]` then `WHERE ...` on its own line.
     fn lower_delete(&mut self, node: &SyntaxNode) -> Doc {
-        self.lower_blocky(node, |k| k == WHERE_CLAUSE)
+        self.lower_clausal(node, |_| false, |k| k == WHERE_CLAUSE)
     }
 
-    /// `COPY INTO <target> FROM <source>` with `FROM` and each option on their own line. Location
-    /// operands are emitted verbatim so stage paths (`@stage/path`) keep their `/` untouched.
+    /// `COPY INTO <target> FROM <source>` with `FROM` and each option on their own line.
     fn lower_copy(&mut self, node: &SyntaxNode) -> Doc {
-        let mut parts = Vec::new();
-        for child in node.children_with_tokens() {
-            if let Some(token) = child.as_token() {
-                if token.kind().is_trivia() {
-                    continue;
-                }
-                if token.kind() == FROM_KW {
-                    parts.push(hard_line());
-                    self.reset();
-                }
-                parts.push(self.token(token));
-            } else if let Some(node) = child.as_node() {
-                match node.kind() {
-                    COPY_OPTION => {
-                        parts.push(hard_line());
-                        self.reset();
-                        parts.push(self.lower_node(node));
-                    }
-                    COPY_LOCATION => {
-                        // Verbatim (preserve `@stage/path`), but trim the leading-trivia space the
-                        // node carries so we don't double it / grow on re-format.
-                        parts.push(space());
-                        parts.push(text(node.text().to_string().trim().to_string()));
-                        self.resume_after(IDENT);
-                    }
-                    _ => parts.push(self.lower_node(node)), // a (subquery) source
-                }
-            }
-        }
-        concat(parts)
+        self.lower_clausal(node, |k| k == FROM_KW, |k| k == COPY_OPTION)
     }
 
     /// `MERGE INTO t USING s ON cond` with `USING`, `ON`, and each `WHEN` clause on their own lines.
     fn lower_merge(&mut self, node: &SyntaxNode) -> Doc {
-        let mut parts = Vec::new();
-        for child in node.children_with_tokens() {
-            if let Some(token) = child.as_token() {
-                if token.kind().is_trivia() {
-                    continue;
-                }
-                if matches!(token.kind(), USING_KW | ON_KW) {
-                    parts.push(hard_line());
-                    self.reset();
-                }
-                parts.push(self.token(token));
-            } else if let Some(node) = child.as_node() {
-                if node.kind() == MERGE_WHEN {
-                    parts.push(hard_line());
-                    self.reset();
-                }
-                parts.push(self.lower_node(node));
-            }
-        }
-        concat(parts)
+        self.lower_clausal(node, |k| matches!(k, USING_KW | ON_KW), |k| k == MERGE_WHEN)
     }
 
-    /// `CREATE [OR REPLACE] ... TABLE/VIEW ...`: the header inline, a column-def list expanded, and
-    /// a defining/CTAS query (after `AS`) on its own line(s).
+    /// `CREATE [OR REPLACE] ... TABLE/VIEW ...`: the header inline (a column-def list expanded in
+    /// place) and a defining/CTAS query after `AS` on its own line(s).
     fn lower_create(&mut self, node: &SyntaxNode) -> Doc {
-        let mut parts = Vec::new();
-        for child in node.children_with_tokens() {
-            if let Some(token) = child.as_token() {
-                if token.kind().is_trivia() {
-                    continue;
-                }
-                parts.push(self.token(token));
-            } else if let Some(child) = child.as_node() {
-                match child.kind() {
-                    COLUMN_DEF_LIST => {
-                        parts.push(space());
-                        parts.push(self.lower_column_def_list(child));
-                    }
-                    SELECT_STMT | SET_OP | WITH_QUERY | SUBQUERY | VALUES_CLAUSE => {
-                        parts.push(hard_line());
-                        self.reset();
-                        parts.push(self.lower_query(child));
-                    }
-                    _ => parts.push(self.lower_node(child)),
-                }
-            }
-        }
-        concat(parts)
+        self.lower_clausal(
+            node,
+            |_| false,
+            |k| {
+                matches!(
+                    k,
+                    SELECT_STMT | SET_OP | WITH_QUERY | SUBQUERY | VALUES_CLAUSE
+                )
+            },
+        )
+    }
+
+    /// A COPY target/source location, emitted verbatim (preserving `@stage/path`, whose `/` operator
+    /// spacing would mangle) with the leading-trivia space trimmed for idempotency.
+    fn lower_copy_location(&mut self, node: &SyntaxNode) -> Doc {
+        let doc = concat(vec![
+            space(),
+            text(node.text().to_string().trim().to_string()),
+        ]);
+        self.resume_after(IDENT);
+        doc
     }
 
     /// `( col type ..., col type ... )` — one column definition per line when it does not fit.
@@ -596,8 +543,8 @@ impl Lowerer {
             MERGE_STMT => self.lower_merge(node),
             CREATE_STMT => self.lower_create(node),
             COPY_STMT => self.lower_copy(node),
-            COPY_LOCATION => verbatim(node),
-            COLUMN_DEF_LIST => self.lower_column_def_list(node),
+            COPY_LOCATION => self.lower_copy_location(node),
+            COLUMN_DEF_LIST => concat(vec![space(), self.lower_column_def_list(node)]),
             // `SET col = ...` and `VALUES (...), (...)` are keyword + comma-list clauses.
             SET_CLAUSE | VALUES_CLAUSE => self.lower_keyword_item_list(node),
             _ => self.lower_children(node),
