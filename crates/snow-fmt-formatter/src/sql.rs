@@ -84,18 +84,20 @@ fn lower_select(select: &SyntaxNode, ctx: Ctx) -> Doc {
         head.push(keyword_text(&tok, ctx));
     }
 
-    let list_doc = select
-        .children()
-        .find(|n| n.kind() == SELECT_LIST)
-        .map(|list| lower_select_list(&list, ctx))
+    let list = select.children().find(|n| n.kind() == SELECT_LIST);
+    let list_doc = list
+        .as_ref()
+        .map(|list| lower_select_list(list, ctx))
         .unwrap_or_else(empty);
+    // Magic trailing comma: a trailing comma the author left in the list is read as "keep this
+    // exploded", forcing the header to break regardless of width. We honor the existing comma but
+    // never synthesize a new one, so the token stream is preserved exactly.
+    let magic_comma = list.as_ref().is_some_and(has_trailing_comma);
 
-    // `SELECT` + list share one group so a short query stays on a single line, and a long one
-    // expands to one item per indented line.
-    let header = group(concat(vec![
-        concat(head),
-        indent(concat(vec![line(), list_doc])),
-    ]));
+    let inner = concat(vec![concat(head), indent(concat(vec![line(), list_doc]))]);
+    // A normal header shares one group (flat when it fits, else one item per line); a magic comma
+    // drops the group so the soft lines always break.
+    let header = if magic_comma { inner } else { group(inner) };
 
     let mut parts = vec![header];
     for clause in select.children() {
@@ -113,7 +115,20 @@ fn lower_select_list(list: &SyntaxNode, ctx: Ctx) -> Doc {
         .filter(|n| n.kind() == SELECT_ITEM)
         .map(|item| inline(&item, ctx))
         .collect();
-    join(concat(vec![text(","), line()]), items)
+    let mut doc = join(concat(vec![text(","), line()]), items);
+    if has_trailing_comma(list) {
+        // Re-emit the author's trailing comma (it is a child token of the list, not of any item).
+        doc = concat(vec![doc, text(",")]);
+    }
+    doc
+}
+
+/// Whether `list`'s last significant child token is a comma (a tolerated trailing comma).
+fn has_trailing_comma(list: &SyntaxNode) -> bool {
+    list.children_with_tokens()
+        .filter(|el| !el.kind().is_trivia())
+        .last()
+        .is_some_and(|el| el.kind() == COMMA)
 }
 
 fn is_select_clause(kind: SyntaxKind) -> bool {

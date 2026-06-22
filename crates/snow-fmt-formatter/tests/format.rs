@@ -88,6 +88,28 @@ fn multiple_statements_are_separated_and_terminated() {
 }
 
 #[test]
+fn magic_trailing_comma_forces_the_list_to_explode() {
+    // The list would fit on one line, but the author's trailing comma means "keep it exploded".
+    let expected = "\
+SELECT
+    a,
+    b,
+FROM t;
+";
+    assert_eq!(fmt("select a, b, from t"), expected);
+}
+
+#[test]
+fn magic_trailing_comma_explodes_even_a_single_item() {
+    assert_eq!(fmt("select a, from t"), "SELECT\n    a,\nFROM t;\n");
+}
+
+#[test]
+fn no_trailing_comma_stays_inline_when_it_fits() {
+    assert_eq!(fmt("select a, b from t"), "SELECT a, b\nFROM t;\n");
+}
+
+#[test]
 fn empty_input_formats_to_empty() {
     assert_eq!(fmt(""), "");
     assert_eq!(fmt("   \n\t "), "");
