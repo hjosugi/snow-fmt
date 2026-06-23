@@ -416,6 +416,7 @@ dependencies = [
 name = "snow-fmt-highlight"
 version = "0.0.0"
 dependencies = [
+ "serde_json",
  "snow-fmt-lexer",
  "snow-fmt-syntax",
  "snow-fmt-test-fixtures",
