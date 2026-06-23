@@ -77,19 +77,18 @@ fn long_select_list_breaks_one_item_per_line() {
             ..FormatOptions::default()
         },
     );
-    let expected = "\
-SELECT
-    alpha,
-    bravo,
-    charlie,
-    delta,
-    echo,
-    foxtrot,
-    golf,
-    hotel
-FROM t;
-";
-    assert_eq!(out, expected);
+    insta::assert_snapshot!(out, @"
+    SELECT
+        alpha,
+        bravo,
+        charlie,
+        delta,
+        echo,
+        foxtrot,
+        golf,
+        hotel
+    FROM t;
+    ");
 }
 
 #[test]
@@ -100,13 +99,12 @@ fn multiple_statements_are_separated_and_terminated() {
 #[test]
 fn magic_trailing_comma_forces_the_list_to_explode() {
     // The list would fit on one line, but the author's trailing comma means "keep it exploded".
-    let expected = "\
-SELECT
-    a,
-    b,
-FROM t;
-";
-    assert_eq!(fmt("select a, b, from t"), expected);
+    insta::assert_snapshot!(fmt("select a, b, from t"), @"
+    SELECT
+        a,
+        b,
+    FROM t;
+    ");
 }
 
 #[test]
@@ -123,15 +121,14 @@ fn no_trailing_comma_stays_inline_when_it_fits() {
 fn function_arguments_honor_a_magic_trailing_comma() {
     // The trailing comma after `b` explodes the argument list, which in turn forces the SELECT
     // list to break (a multiline item can't sit inline).
-    let expected = "\
-SELECT
-    f(
-        a,
-        b,
-    )
-FROM t;
-";
-    assert_eq!(fmt("select f(a, b,) from t"), expected);
+    insta::assert_snapshot!(fmt("select f(a, b,) from t"), @"
+    SELECT
+        f(
+            a,
+            b,
+        )
+    FROM t;
+    ");
 }
 
 #[test]
@@ -141,15 +138,14 @@ fn function_arguments_stay_inline_without_a_trailing_comma() {
 
 #[test]
 fn values_rows_honor_a_magic_trailing_comma() {
-    let expected = "\
-VALUES
-    (
-        1,
-        2,
-    ),
-    (3, 4);
-";
-    assert_eq!(fmt("values (1, 2,), (3, 4)"), expected);
+    insta::assert_snapshot!(fmt("values (1, 2,), (3, 4)"), @"
+    VALUES
+        (
+            1,
+            2,
+        ),
+        (3, 4);
+    ");
 }
 
 #[test]
@@ -174,30 +170,28 @@ fn empty_argument_list_stays_tight() {
 
 #[test]
 fn joins_each_go_on_their_own_line() {
-    let expected = "\
-SELECT a.x, b.y
-FROM a
-INNER JOIN b ON a.id = b.id
-LEFT JOIN c ON b.k = c.k;
-";
-    assert_eq!(
+    insta::assert_snapshot!(
         fmt("select a.x, b.y from a inner join b on a.id = b.id left join c on b.k = c.k"),
-        expected
+        @"
+    SELECT a.x, b.y
+    FROM a
+    INNER JOIN b ON a.id = b.id
+    LEFT JOIN c ON b.k = c.k;
+    ",
     );
 }
 
 #[test]
 fn in_list_honors_a_magic_trailing_comma() {
-    let expected = "\
-SELECT *
-FROM t
-WHERE x IN (
-    1,
-    2,
-    3,
-);
-";
-    assert_eq!(fmt("select * from t where x in (1, 2, 3,)"), expected);
+    insta::assert_snapshot!(fmt("select * from t where x in (1, 2, 3,)"), @"
+    SELECT *
+    FROM t
+    WHERE x IN (
+        1,
+        2,
+        3,
+    );
+    ");
 }
 
 #[test]
@@ -225,15 +219,14 @@ fn order_by_items_wrap_when_they_do_not_fit() {
             ..FormatOptions::default()
         },
     );
-    let expected = "\
-SELECT *
-FROM t
-ORDER BY
-    alpha,
-    bravo DESC,
-    charlie NULLS LAST;
-";
-    assert_eq!(out, expected);
+    insta::assert_snapshot!(out, @"
+    SELECT *
+    FROM t
+    ORDER BY
+        alpha,
+        bravo DESC,
+        charlie NULLS LAST;
+    ");
 }
 
 #[test]
@@ -253,16 +246,15 @@ fn long_case_breaks_one_arm_per_line() {
             ..FormatOptions::default()
         },
     );
-    let expected = "\
-SELECT
-    CASE
-        WHEN a > 10 THEN 'big'
-        WHEN a > 0 THEN 'small'
-        ELSE 'zero'
-    END AS label
-FROM t;
-";
-    assert_eq!(out, expected);
+    insta::assert_snapshot!(out, @"
+    SELECT
+        CASE
+            WHEN a > 10 THEN 'big'
+            WHEN a > 0 THEN 'small'
+            ELSE 'zero'
+        END AS label
+    FROM t;
+    ");
 }
 
 #[test]
@@ -275,21 +267,20 @@ fn simple_case_keeps_its_operand() {
 
 #[test]
 fn cte_bodies_are_indented_and_one_per_line() {
-    let expected = "\
-WITH a AS (
-    SELECT x
-    FROM t
-),
-b AS (
-    SELECT y
-    FROM u
-)
-SELECT *
-FROM a;
-";
-    assert_eq!(
+    insta::assert_snapshot!(
         fmt("with a as (select x from t), b as (select y from u) select * from a"),
-        expected
+        @"
+    WITH a AS (
+        SELECT x
+        FROM t
+    ),
+    b AS (
+        SELECT y
+        FROM u
+    )
+    SELECT *
+    FROM a;
+    ",
     );
 }
 
@@ -303,30 +294,28 @@ fn short_cte_stays_inline() {
 
 #[test]
 fn derived_table_subquery_is_indented() {
-    let expected = "\
-SELECT *
-FROM (
-    SELECT id
-    FROM users
-    WHERE active
-) u;
-";
-    assert_eq!(
+    insta::assert_snapshot!(
         fmt("select * from (select id from users where active) u"),
-        expected
+        @"
+    SELECT *
+    FROM (
+        SELECT id
+        FROM users
+        WHERE active
+    ) u;
+    ",
     );
 }
 
 #[test]
 fn set_operations_put_each_query_and_operator_on_its_own_line() {
-    let expected = "\
-SELECT a
-FROM t
-UNION ALL
-SELECT a
-FROM u;
-";
-    assert_eq!(fmt("select a from t union all select a from u"), expected);
+    insta::assert_snapshot!(fmt("select a from t union all select a from u"), @"
+    SELECT a
+    FROM t
+    UNION ALL
+    SELECT a
+    FROM u;
+    ");
 }
 
 #[test]
@@ -371,16 +360,15 @@ fn delete_where_goes_below() {
 
 #[test]
 fn merge_clauses_each_go_on_their_own_line() {
-    let expected = "\
-MERGE INTO target t
-USING source s
-ON t.id = s.id
-WHEN MATCHED THEN UPDATE SET t.v = s.v
-WHEN NOT MATCHED THEN INSERT (id, v) VALUES (s.id, s.v);
-";
-    assert_eq!(
+    insta::assert_snapshot!(
         fmt("merge into target t using source s on t.id = s.id when matched then update set t.v = s.v when not matched then insert (id, v) values (s.id, s.v)"),
-        expected
+        @"
+    MERGE INTO target t
+    USING source s
+    ON t.id = s.id
+    WHEN MATCHED THEN UPDATE SET t.v = s.v
+    WHEN NOT MATCHED THEN INSERT (id, v) VALUES (s.id, s.v);
+    ",
     );
 }
 
@@ -409,13 +397,12 @@ fn create_table_column_defs_wrap_one_per_line() {
             ..FormatOptions::default()
         },
     );
-    let expected = "\
-CREATE TABLE t (
-    id int,
-    name varchar(100) NOT NULL
-);
-";
-    assert_eq!(out, expected);
+    insta::assert_snapshot!(out, @"
+    CREATE TABLE t (
+        id int,
+        name varchar(100) NOT NULL
+    );
+    ");
 }
 
 #[test]
@@ -556,15 +543,14 @@ fn pivot_value_aliases_are_kept() {
 
 #[test]
 fn copy_into_puts_from_and_options_on_their_own_lines() {
-    let expected = "\
-COPY INTO raw.orders
-FROM @raw.stage/orders/
-file_format = (type = json)
-on_error = continue;
-";
-    assert_eq!(
+    insta::assert_snapshot!(
         fmt("copy into raw.orders from @raw.stage/orders/ file_format = (type = json) on_error = continue"),
-        expected
+        @"
+    COPY INTO raw.orders
+    FROM @raw.stage/orders/
+    file_format = (type = json)
+    on_error = continue;
+    ",
     );
 }
 
@@ -578,24 +564,23 @@ fn asof_join_and_match_condition_are_kept() {
 
 #[test]
 fn match_recognize_lays_out_one_clause_per_line() {
-    let expected = "\
-SELECT *
-FROM t MATCH_RECOGNIZE (
-    PARTITION BY a
-    ORDER BY b
-    MEASURES match_number() AS mn, first(price) AS fp
-    ONE ROW PER MATCH
-    AFTER MATCH SKIP PAST LAST ROW
-    PATTERN (strt down+ up+)
-    DEFINE down AS price < prev(price), up AS price > prev(price)
-);
-";
-    assert_eq!(
+    insta::assert_snapshot!(
         fmt("select * from t match_recognize(partition by a order by b \
              measures match_number() as mn, first(price) as fp one row per match \
              after match skip past last row pattern(strt down+ up+) \
              define down as price < prev(price), up as price > prev(price))"),
-        expected
+        @"
+    SELECT *
+    FROM t MATCH_RECOGNIZE (
+        PARTITION BY a
+        ORDER BY b
+        MEASURES match_number() AS mn, first(price) AS fp
+        ONE ROW PER MATCH
+        AFTER MATCH SKIP PAST LAST ROW
+        PATTERN (strt down+ up+)
+        DEFINE down AS price < prev(price), up AS price > prev(price)
+    );
+    "
     );
 }
 
@@ -611,17 +596,16 @@ fn keywords_used_as_function_names_are_callable() {
 
 #[test]
 fn multi_table_insert_first_puts_each_branch_on_its_own_line() {
-    let expected = "\
-INSERT FIRST
-WHEN sev >= 9 THEN INTO high
-ELSE
-INTO low
-SELECT sev
-FROM events;
-";
-    assert_eq!(
+    insta::assert_snapshot!(
         fmt("insert first when sev >= 9 then into high else into low select sev from events"),
-        expected
+        @"
+    INSERT FIRST
+    WHEN sev >= 9 THEN INTO high
+    ELSE
+    INTO low
+    SELECT sev
+    FROM events;
+    ",
     );
 }
 
@@ -699,13 +683,12 @@ fn banner_comment_does_not_explode_the_select_list() {
 fn trailing_line_comment_attaches_to_its_column() {
     // A `--` comment after a column (even after the comma) trails that column's line, and forces
     // the list to break so the comment ends its line.
-    let expected = "\
-SELECT
-    a, -- first
-    b
-FROM t;
-";
-    assert_eq!(fmt("select a, -- first\n b from t"), expected);
+    insta::assert_snapshot!(fmt("select a, -- first\n b from t"), @"
+    SELECT
+        a, -- first
+        b
+    FROM t;
+    ");
 }
 
 #[test]

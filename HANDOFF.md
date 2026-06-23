@@ -30,7 +30,7 @@
 - ✅ ~~`MATCH_RECOGNIZE` が未構造化＝長い1行（measures/pattern/define が小文字）~~ → 本文を構造化（PARTITION/ORDER/MEASURES/PER MATCH/AFTER MATCH SKIP/PATTERN/SUBSET/DEFINE を1行ずつ）、contextual 大文字化、`PATTERN(...)` 本体は verbatim。ついでに `first()/last()/left()` 等の予約語関数呼び出しを解禁。
 - 残る balanced-paren（`SAMPLE`/`TABLESAMPLE`/time travel `AT|BEFORE (...)`/COPY のステージ）は未構造化のインライン（短いので実害小）。
 - ✅ ~~`INSERT INTO t(cols)` の `(` 前スペース不統一~~ → 列名リスト（`COLUMN_LIST`）は常に前スペース（`INSERT INTO t (a, b)`／`AS t (c1, c2)`／`USING (a, b)`）、関数呼び出し `ARG_LIST` は密着のまま。`CREATE TABLE t (…)` と一致。
-- `insta` スナップショット未導入（exact-string テストで代替中）。
+- ✅ ~~`insta` スナップショット未導入~~ → 複数行のゴールデンテストを `insta::assert_snapshot!`（インライン）に移行。期待値はテスト内に残りつつ自動更新可。更新は `cargo insta test --accept`（要 `cargo install cargo-insta`）、検証は通常の `cargo test` で可。
 - ※「コメントを含む文は丸ごと verbatim」は**誤り**だった: leading/trailing/inline コメントは通常経路で整形済み。verbatim はトークンに付与できない稀なコメントだけの安全網。
 
 ## 1. ゴール（ユーザー指示の要約）
@@ -109,4 +109,6 @@ cargo test --workspace
 cargo clippy --workspace --all-targets
 cargo test -p snow-fmt-syntax --features rowan
 cargo fmt --all
+# フォーマッタのゴールデンは insta インラインスナップショット。整形を意図的に変えたら:
+cargo insta test --accept -p snow-fmt-formatter   # 要: cargo install cargo-insta
 ```
