@@ -32,7 +32,8 @@ use lsp_types::{
 };
 use snow_fmt_formatter::FormatOptions;
 use snow_fmt_lsp::{
-    apply_change, diagnostics, folding_ranges, format_edits, hover, semantic_tokens, TOKEN_TYPES,
+    apply_change, diagnostics, folding_ranges, format_edits, hover, semantic_tokens,
+    token_modifiers, token_types,
 };
 
 type Docs = HashMap<Uri, String>;
@@ -59,8 +60,8 @@ fn server_capabilities() -> ServerCapabilities {
         semantic_tokens_provider: Some(SemanticTokensServerCapabilities::SemanticTokensOptions(
             SemanticTokensOptions {
                 legend: SemanticTokensLegend {
-                    token_types: TOKEN_TYPES.to_vec(),
-                    token_modifiers: Vec::new(),
+                    token_types: token_types(),
+                    token_modifiers: token_modifiers(),
                 },
                 full: Some(lsp_types::SemanticTokensFullOptions::Bool(true)),
                 range: Some(false),

@@ -134,8 +134,9 @@ pub fn semantic_token(kind: HighlightKind) -> Option<(SemanticTokenType, Semanti
 
 /// An embedded-language region inside a `$$ … $$` body. Built by [`detect_injections`]; consumers
 /// can re-highlight the [`range`](Injection::range) with the embedded grammar named by
-/// [`language`](Injection::language).
+/// [`language`](Injection::language). `#[non_exhaustive]` so fields can be added compatibly.
 #[derive(Clone, Debug, PartialEq, Eq)]
+#[non_exhaustive]
 pub struct Injection {
     /// The embedded language declared (or inferred) for this body.
     pub language: InjectedLanguage,
@@ -183,24 +184,34 @@ impl InjectedLanguage {
 }
 
 /// A semantic token resolved to absolute byte coordinates (pre delta-encoding).
+/// `#[non_exhaustive]` so fields can be added without breaking downstream matches.
 #[derive(Clone, Debug, PartialEq, Eq)]
+#[non_exhaustive]
 pub struct ResolvedToken {
     /// Byte range of the token in the source.
     pub range: std::ops::Range<usize>,
+    /// The LSP semantic token type this token maps to.
     pub token_type: SemanticTokenType,
+    /// The LSP semantic token modifiers (a bitset) for this token.
     pub modifiers: SemanticTokenModifiers,
 }
 
 /// A semantic token as the LSP wire format wants it: zero-based line / UTF-16 char position with a
 /// UTF-16 length, plus the legend indices. These are *absolute* (not yet delta-encoded); call
-/// [`delta_encode`] for the on-wire `(deltaLine, deltaStartChar, …)` form.
+/// [`delta_encode`] for the on-wire `(deltaLine, deltaStartChar, …)` form. `#[non_exhaustive]` so
+/// fields can be added without breaking downstream matches.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[non_exhaustive]
 pub struct LineToken {
+    /// Zero-based line of the token's start.
     pub line: u32,
+    /// Zero-based UTF-16 column of the token's start.
     pub start_char: u32,
     /// Length in UTF-16 code units (the LSP unit).
     pub length: u32,
+    /// Legend index of the token type (see [`SemanticTokenType::index`]).
     pub token_type: u32,
+    /// The token's modifier bitset (see [`SemanticTokenModifiers::bits`]).
     pub modifiers: u32,
 }
 
@@ -266,9 +277,13 @@ pub fn resolve_tokens(input: &str) -> Vec<ResolvedToken> {
 }
 
 /// The full semantic-token result: the per-token tagging plus the embedded-language regions.
+/// `#[non_exhaustive]` so fields can be added without breaking downstream matches.
 #[derive(Clone, Debug, PartialEq, Eq)]
+#[non_exhaustive]
 pub struct SemanticTokens {
+    /// Every significant token, tagged with its LSP type + modifiers (trivia/punctuation dropped).
     pub tokens: Vec<ResolvedToken>,
+    /// The `$$ … $$` embedded-language regions detected in the source.
     pub injections: Vec<Injection>,
 }
 

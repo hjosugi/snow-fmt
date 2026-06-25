@@ -44,12 +44,6 @@ grammar scopes as a keyword or type must be classified the same way by
 }
 ```
 
-## `textmate/snowflake.tmLanguage.json`
-
-The original baseline grammar (`source.sql.snowflake`). Kept for editors already wired to
-that scope name; the top-level `snowflake.tmLanguage.json` above is the more complete
-successor.
-
 ## Semantic tokens (LSP)
 
 For LSP-based editors, `snow-fmt-highlight::semantic` maps the lexical highlighter onto the

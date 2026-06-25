@@ -8,40 +8,32 @@
 
 use lsp_types::{
     Diagnostic, DiagnosticSeverity, FoldingRange, FoldingRangeKind, Hover, HoverContents,
-    MarkupContent, MarkupKind, Position, Range, SemanticToken, SemanticTokenType, TextEdit,
+    MarkupContent, MarkupKind, Position, Range, SemanticToken, SemanticTokenModifier,
+    SemanticTokenType, TextEdit,
 };
 use snow_fmt_formatter::{format, FormatOptions};
-use snow_fmt_highlight::HighlightKind;
+use snow_fmt_highlight::semantic;
 
-/// The semantic-token legend. A token's `token_type` field is an index into this slice, so the
-/// order here is the contract with the editor (declared in the server's capabilities).
-pub const TOKEN_TYPES: &[SemanticTokenType] = &[
-    SemanticTokenType::KEYWORD,   // 0
-    SemanticTokenType::TYPE,      // 1
-    SemanticTokenType::VARIABLE,  // 2  identifiers (plain / quoted)
-    SemanticTokenType::STRING,    // 3  string + dollar-quoted
-    SemanticTokenType::NUMBER,    // 4
-    SemanticTokenType::PARAMETER, // 5  bind / positional variables ($1, :name)
-    SemanticTokenType::OPERATOR,  // 6
-    SemanticTokenType::COMMENT,   // 7
-];
+/// The semantic-token type legend, mirrored from the single source of truth in
+/// `snow-fmt-highlight` ([`semantic::SemanticTokenType::LEGEND`]). A token's `token_type` field is
+/// an index into this slice, so the order here is the contract with the editor (declared in the
+/// server's capabilities) and *must* equal the highlighter's legend — otherwise an editor would
+/// decode our token types against the wrong names.
+pub fn token_types() -> Vec<SemanticTokenType> {
+    semantic::SemanticTokenType::LEGEND
+        .iter()
+        .map(|ty| SemanticTokenType::new(ty.name()))
+        .collect()
+}
 
-/// The legend index for a highlight kind, or `None` for kinds that carry no semantic token
-/// (whitespace, punctuation, and lex errors — the latter are surfaced as diagnostics instead).
-fn token_type(kind: HighlightKind) -> Option<u32> {
-    Some(match kind {
-        HighlightKind::Keyword => 0,
-        HighlightKind::Type => 1,
-        HighlightKind::Identifier | HighlightKind::QuotedIdentifier => 2,
-        HighlightKind::String | HighlightKind::DollarString => 3,
-        HighlightKind::Number => 4,
-        HighlightKind::Variable => 5,
-        HighlightKind::Operator => 6,
-        HighlightKind::Comment => 7,
-        HighlightKind::Whitespace | HighlightKind::Punctuation | HighlightKind::Error => {
-            return None
-        }
-    })
+/// The semantic-token modifier legend, mirrored from
+/// [`semantic::SemanticTokenModifiers::LEGEND`]. A token's `token_modifiers_bitset` is decoded
+/// bit-by-bit against this slice, so it too must match the highlighter.
+pub fn token_modifiers() -> Vec<SemanticTokenModifier> {
+    semantic::SemanticTokenModifiers::LEGEND
+        .iter()
+        .map(|&name| SemanticTokenModifier::new(name))
+        .collect()
 }
 
 /// Maps byte offsets into a document to LSP [`Position`]s (UTF-16 columns).
@@ -204,44 +196,28 @@ pub fn apply_change(text: &str, range: Option<Range>, new_text: &str) -> String 
     out
 }
 
-/// The delta-encoded semantic tokens for `textDocument/semanticTokens/full`. Multi-line tokens
-/// (block comments, dollar-quoted strings) are split into one token per line, as the LSP encoding
-/// requires each token to stay on a single line.
+/// The delta-encoded semantic tokens for `textDocument/semanticTokens/full`.
+///
+/// This is a thin adapter over `snow-fmt-highlight`'s [`semantic::semantic_tokens_lsp`]: the
+/// highlighter already splits multi-line tokens (block comments, dollar-quoted strings) into one
+/// token per line — the LSP encoding requires each token to stay on a single line — computes UTF-16
+/// columns/lengths, and delta-encodes into `(deltaLine, deltaStartChar, length, tokenType,
+/// tokenModifiers)` quintuples against the same legend the server advertises. We only reshape each
+/// quintuple into an `lsp_types::SemanticToken`, **preserving** the modifier bitset (rather than
+/// hardcoding 0) so `defaultLibrary` / `documentation` modifiers reach the editor.
 pub fn semantic_tokens(text: &str) -> Vec<SemanticToken> {
-    let highlighted = snow_fmt_highlight::highlight(text);
-    let index = LineIndex::new(text);
-    let mut tokens = Vec::new();
-    let (mut prev_line, mut prev_col) = (0u32, 0u32);
-
-    for token in &highlighted.tokens {
-        let Some(token_type) = token_type(token.kind) else {
-            continue;
-        };
-        // Walk each line-piece of the (possibly multi-line) token at its real byte offset.
-        let mut piece_start = token.range.start;
-        for piece in token.text.split('\n') {
-            let length: u32 = piece.chars().map(|c| c.len_utf16() as u32).sum();
-            if length > 0 {
-                let pos = index.position(piece_start);
-                let delta_line = pos.line - prev_line;
-                let delta_start = if delta_line == 0 {
-                    pos.character - prev_col
-                } else {
-                    pos.character
-                };
-                tokens.push(SemanticToken {
-                    delta_line,
-                    delta_start,
-                    length,
-                    token_type,
-                    token_modifiers_bitset: 0,
-                });
-                (prev_line, prev_col) = (pos.line, pos.character);
-            }
-            piece_start += piece.len() + 1; // skip the piece and its trailing '\n'
-        }
-    }
-    tokens
+    semantic::semantic_tokens_lsp(text)
+        .into_iter()
+        .map(
+            |[delta_line, delta_start, length, token_type, token_modifiers_bitset]| SemanticToken {
+                delta_line,
+                delta_start,
+                length,
+                token_type,
+                token_modifiers_bitset,
+            },
+        )
+        .collect()
 }
 
 #[cfg(test)]
@@ -343,6 +319,35 @@ mod tests {
         assert_eq!(tokens[0].delta_start, 0);
         assert_eq!(tokens[0].length, 6);
         assert_eq!(tokens[0].token_type, 0);
+        // The keyword carries the `defaultLibrary` modifier — it must not be hardcoded to 0.
+        assert_eq!(
+            tokens[0].token_modifiers_bitset,
+            semantic::SemanticTokenModifiers::DEFAULT_LIBRARY.bits()
+        );
+    }
+
+    #[test]
+    fn server_legend_equals_the_highlighter_legend() {
+        // The advertised type legend must be exactly the highlighter's LEGEND, in order — this is
+        // the contract an editor decodes `token_type` against.
+        let advertised: Vec<String> = token_types()
+            .iter()
+            .map(|t| t.as_str().to_string())
+            .collect();
+        let expected: Vec<String> = semantic::SemanticTokenType::LEGEND
+            .iter()
+            .map(|t| t.name().to_string())
+            .collect();
+        assert_eq!(advertised, expected);
+        // It includes `namespace` (index 8) — the type the old LSP legend was missing.
+        assert_eq!(advertised.last().map(String::as_str), Some("namespace"));
+
+        // Likewise the modifier legend mirrors the highlighter's.
+        let mods: Vec<String> = token_modifiers()
+            .iter()
+            .map(|m| m.as_str().to_string())
+            .collect();
+        assert_eq!(mods, vec!["documentation", "defaultLibrary"]);
     }
 
     #[test]

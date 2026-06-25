@@ -14,16 +14,27 @@ pub use semantic::{
     SemanticTokenModifiers, SemanticTokenType, SemanticTokens,
 };
 
+/// The result of [`highlight`]: a lossless token stream plus any lexer errors. `#[non_exhaustive]`
+/// so fields can be added without breaking downstream matches.
 #[derive(Clone, Debug, PartialEq, Eq)]
+#[non_exhaustive]
 pub struct Highlighted<'a> {
+    /// Every token in source order; concatenating their `text` reproduces the input byte-for-byte.
     pub tokens: Vec<HighlightToken<'a>>,
+    /// Lexer errors recovered while tokenizing (empty for clean input).
     pub errors: Vec<LexError>,
 }
 
+/// A single highlighted token: a classified [`HighlightKind`] over a byte range of the source.
+/// `#[non_exhaustive]` so fields can be added without breaking downstream matches.
 #[derive(Clone, Debug, PartialEq, Eq)]
+#[non_exhaustive]
 pub struct HighlightToken<'a> {
+    /// The highlight classification of this token.
     pub kind: HighlightKind,
+    /// The token's exact source text (the slice `&input[range]`).
     pub text: &'a str,
+    /// Byte range of the token in the source.
     pub range: std::ops::Range<usize>,
 }
 
@@ -189,50 +200,10 @@ fn is_operator(kind: SyntaxKind) -> bool {
 mod tests {
     use super::*;
 
-    /// Pull the alternation words out of a `(?i)\b(a|b|c)\b` grammar pattern.
-    fn alternation(pattern: &str) -> Vec<String> {
-        let inner = pattern
-            .trim_start_matches("(?i)")
-            .trim_start_matches("\\b(")
-            .trim_end_matches("\\b")
-            .trim_end_matches(')');
-        inner.split('|').map(str::to_string).collect()
-    }
-
-    /// The committed TextMate grammar must not list any word the highlighter classifies
-    /// differently — otherwise an editor using the grammar and one using the LSP/CST would
-    /// disagree. We tie every keyword/type word in the grammar back to [`classify`].
-    #[test]
-    fn textmate_grammar_matches_the_highlighter() {
-        let path = concat!(
-            env!("CARGO_MANIFEST_DIR"),
-            "/../../editors/textmate/snowflake.tmLanguage.json"
-        );
-        let grammar: serde_json::Value =
-            serde_json::from_str(&std::fs::read_to_string(path).expect("read grammar"))
-                .expect("parse grammar");
-        let repo = &grammar["repository"];
-
-        let keywords = alternation(repo["keywords"]["match"].as_str().unwrap());
-        assert!(keywords.len() > 100, "keyword set looks truncated");
-        for word in &keywords {
-            assert_eq!(
-                classify(SyntaxKind::IDENT, word),
-                HighlightKind::Keyword,
-                "grammar lists `{word}` as a keyword but the highlighter disagrees"
-            );
-        }
-
-        let types = alternation(repo["types"]["match"].as_str().unwrap());
-        assert!(types.len() > 20, "type set looks truncated");
-        for word in &types {
-            assert_eq!(
-                classify(SyntaxKind::IDENT, word),
-                HighlightKind::Type,
-                "grammar lists `{word}` as a type but the highlighter disagrees"
-            );
-        }
-    }
+    // The TextMate-grammar / highlighter consistency check now lives in `tests/textmate.rs`
+    // against the canonical `editors/snowflake.tmLanguage.json`. The old, superseded grammar
+    // under `editors/textmate/` (scope `source.sql.snowflake`) has been removed, so the
+    // `textmate_grammar_matches_the_highlighter` test that pinned it is gone with it.
 
     #[test]
     fn classifies_core_snowflake_tokens() {
