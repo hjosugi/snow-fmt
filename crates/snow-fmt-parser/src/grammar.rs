@@ -722,8 +722,17 @@ fn declare_section(p: &mut Parser) {
 
 fn declare_item(p: &mut Parser) {
     let m = p.start();
+    let mut first = true;
     while !p.at(SEMICOLON) && !p.at(BEGIN_KW) && !p.at_eof() {
-        p.bump_any();
+        // `<name> [<type>] DEFAULT <expr>` / cursor `… FOR <query>`: up-case the `DEFAULT` value
+        // word (not reserved — `default` is a common identifier, so never the declared name in the
+        // first position) and keep the rest verbatim.
+        if !first && p.nth_contextual(0, ContextualKeyword::Default) {
+            p.bump_as(CONTEXTUAL_KEYWORD);
+        } else {
+            p.bump_any();
+        }
+        first = false;
     }
     m.complete(p, DECLARE_ITEM);
 }
@@ -803,8 +812,24 @@ fn at_sql_statement_start(p: &Parser) -> bool {
 /// expression `CASE … END` on the right of a `LET`/assignment — without mis-splitting.
 fn simple_script_stmt(p: &mut Parser, node: SyntaxKind) {
     let m = p.start();
+    let mut first = true;
     while !p.at(SEMICOLON) && !p.at_eof() {
-        p.bump_any();
+        // Up-case the scripting structural words that are not reserved, but only in a position where
+        // the word cannot be an identifier — so a variable literally named `default`/`break` is left
+        // alone. `DEFAULT` introduces a value and never starts a statement; `BREAK`/`CONTINUE` are
+        // whole statements (the only/first token). Everything else is kept verbatim.
+        let up = if first {
+            p.nth_contextual(0, ContextualKeyword::Break)
+                || p.nth_contextual(0, ContextualKeyword::Continue)
+        } else {
+            p.nth_contextual(0, ContextualKeyword::Default) && !p.nth_at(1, ASSIGN)
+        };
+        if up {
+            p.bump_as(CONTEXTUAL_KEYWORD);
+        } else {
+            p.bump_any();
+        }
+        first = false;
     }
     m.complete(p, node);
 }
@@ -837,7 +862,15 @@ fn loop_stmt(p: &mut Parser) {
     if p.at(FOR_KW) || p.at(WHILE_KW) {
         p.bump_any(); // FOR / WHILE
         while !p.at(DO_KW) && !p.at(SEMICOLON) && !p.at(END_KW) && !p.at_eof() {
-            p.bump_any(); // loop header (counter/range or cursor; condition)
+            // The counter-loop range words `REVERSE`/`TO` up-case in this position; everything else
+            // (the counter name, bounds, cursor name, `USING (…)`, the condition) is kept verbatim.
+            if p.nth_contextual(0, ContextualKeyword::Reverse)
+                || p.nth_contextual(0, ContextualKeyword::To)
+            {
+                p.bump_as(CONTEXTUAL_KEYWORD);
+            } else {
+                p.bump_any(); // loop header (counter/range or cursor; condition)
+            }
         }
         p.expect(DO_KW);
         stmt_list(p, |p| p.at(END_KW));

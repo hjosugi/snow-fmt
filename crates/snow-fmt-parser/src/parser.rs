@@ -67,6 +67,17 @@ pub(crate) enum ContextualKeyword {
     Transaction,
     /// `BEGIN WORK` — the SQL-standard spelling of a transaction start.
     Work,
+    // ---- Snowflake Scripting structural words (not reserved: `default`/`break` are common
+    // identifiers, so they up-case only in their scripting position). The counter-loop `TO` reuses
+    // the `To` variant declared above. ----
+    /// `FOR i IN REVERSE <start> TO <end>` — counts down.
+    Reverse,
+    /// `<name> [<type>] DEFAULT <expr>` — a declaration's default value.
+    Default,
+    /// `BREAK [<label>]` — exit a loop.
+    Break,
+    /// `CONTINUE [<label>]` — skip to the next loop iteration.
+    Continue,
 }
 
 impl ContextualKeyword {
@@ -95,6 +106,10 @@ impl ContextualKeyword {
             ContextualKeyword::Comment => "comment",
             ContextualKeyword::Transaction => "transaction",
             ContextualKeyword::Work => "work",
+            ContextualKeyword::Reverse => "reverse",
+            ContextualKeyword::Default => "default",
+            ContextualKeyword::Break => "break",
+            ContextualKeyword::Continue => "continue",
         }
     }
 }
