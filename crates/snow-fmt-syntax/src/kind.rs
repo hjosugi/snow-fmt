@@ -350,6 +350,8 @@ pub enum SyntaxKind {
     COPY_STMT,
     COPY_LOCATION,
     COPY_OPTION,
+    // A `@stage[/path]` reference used as a table/source (e.g. `FROM @s/p`, `COPY ... FROM @s`).
+    STAGE_REF,
     // Phase 6: multi-table INSERT
     INTO_CLAUSE,
     INSERT_WHEN,

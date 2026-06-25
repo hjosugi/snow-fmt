@@ -621,6 +621,15 @@ impl Lowerer {
         concat(parts)
     }
 
+    /// A `@stage/path` reference used as a table/source. Its `/` and `.` connectors would be
+    /// re-spaced by the generic token walker, so the run is emitted verbatim, with a normal leading
+    /// separator (e.g. the space after `FROM`) and spacing resumed as a value for a trailing alias.
+    fn lower_stage_ref(&mut self, node: &SyntaxNode) -> Doc {
+        let sep = self.sep_before(AT);
+        self.resume_after(IDENT);
+        concat(vec![sep, text(node.text().to_string().trim().to_string())])
+    }
+
     /// A COPY target/source location, emitted verbatim (preserving `@stage/path`, whose `/` operator
     /// spacing would mangle) with the leading-trivia space trimmed for idempotency.
     fn lower_copy_location(&mut self, node: &SyntaxNode) -> Doc {
@@ -793,6 +802,7 @@ impl Lowerer {
             CREATE_STMT => self.lower_create(node),
             COPY_STMT => self.lower_copy(node),
             COPY_LOCATION => self.lower_copy_location(node),
+            STAGE_REF => self.lower_stage_ref(node),
             COLUMN_DEF_LIST => concat(vec![space(), self.lower_column_def_list(node)]),
             MATCH_RECOGNIZE => self.lower_match_recognize(node),
             PATTERN_CLAUSE => self.lower_pattern_clause(node),

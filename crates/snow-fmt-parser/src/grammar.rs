@@ -435,6 +435,43 @@ fn copy_stmt(p: &mut Parser) {
     m.complete(p, COPY_STMT);
 }
 
+/// A staged-file reference used where a table can appear: `@[~|%][namespace.]stage[/path...]`.
+///
+/// The lexer splits this into many tokens (`@`, names, `/`, `.`, `~`, `%`, numbers); we gather a
+/// contiguous run into one `STAGE_REF` node. To avoid swallowing a following clause keyword (e.g.
+/// `FROM @s WHERE`), additional path segments are only consumed when joined by a `/` or `.`
+/// connector — a bare word after whitespace ends the reference. The rule is total and never panics.
+fn stage_ref(p: &mut Parser) {
+    let m = p.start();
+    p.bump(AT); // @
+    p.eat(TILDE); // @~ (the user's home stage)
+    p.eat(PERCENT); // @%table (a table's internal stage)
+    eat_stage_atom(p); // stage / table / namespace name (possibly a quoted identifier)
+    while p.at(DOT) || p.at(SLASH) {
+        // Further `.namespace` / `/path` segments, only when introduced by a connector.
+        p.bump_any(); // . or /
+        while eat_stage_atom(p) {}
+    }
+    m.complete(p, STAGE_REF);
+}
+
+/// Consume one atom of a stage path (a name, number, or `~`/`%`), returning whether one was eaten.
+/// Anything else (paren, comma, `=`, EOF, a clause keyword) ends the path.
+fn eat_stage_atom(p: &mut Parser) -> bool {
+    if p.at(IDENT)
+        || p.at(QUOTED_IDENT)
+        || p.at(INT_NUMBER)
+        || p.at(FLOAT_NUMBER)
+        || p.at(TILDE)
+        || p.at(PERCENT)
+    {
+        p.bump_any();
+        true
+    } else {
+        false
+    }
+}
+
 /// A COPY target/source: a parenthesized query, or a location captured as a verbatim token run up
 /// to `FROM`, the first option, or the statement end.
 fn copy_operand(p: &mut Parser) {
@@ -467,7 +504,7 @@ fn copy_option(p: &mut Parser) {
         if p.eat(EQ) {
             if p.at(L_PAREN) {
                 balanced_parens(p);
-            } else {
+            } else if !p.at(SEMICOLON) && !p.at_eof() {
                 p.bump_any(); // a single literal / bare word value
             }
         }
@@ -1163,6 +1200,12 @@ fn table_ref(p: &mut Parser) {
         let r = p.start();
         p.bump(VARIABLE);
         r.complete(p, NAME_REF);
+    } else if p.at(AT) {
+        // A staged-file source: `FROM @stage[/path] [( FILE_FORMAT => ... )]` (data-load transform).
+        stage_ref(p);
+        if p.at(L_PAREN) {
+            arg_list(p); // FROM @s ( FILE_FORMAT => my_ff, PATTERN => '...' )
+        }
     } else if p.at_name() {
         name_ref(p);
         if p.at(L_PAREN) {
