@@ -63,6 +63,22 @@ scripts/run-external-corpus.sh --path /path/to/sqls --limit 500
 scripts/run-external-corpus.sh --url https://example.com/sql-corpus.tar.gz --limit 500
 ```
 
+## Conformance Report Generator
+
+`scripts/conformance-report.py` mines `.sql` files and SQL fenced code blocks from a local
+directory/file/archive or a downloaded archive, writes a temporary corpus, runs the same external
+corpus harness, and emits a Markdown parser/formatter report:
+
+```sh
+scripts/conformance-report.py --path crates/sql-dialect-fmt-formatter/tests/corpus_sample \
+  --out target/conformance-report.md
+scripts/conformance-report.py --url https://example.com/docs-or-examples.tar.gz --limit 500
+```
+
+This is the 1.0 lane for official-spec-derived coverage: it does not replace the handwritten CST
+parser, but it gives every docs/examples sweep a repeatable parser-gap report and reuses the same
+losslessness/idempotency invariants as CI.
+
 ## Continuous Operation
 
 `.github/workflows/corpus.yml` runs on every pull request, on `main`, and weekly. By default it

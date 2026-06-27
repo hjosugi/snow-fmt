@@ -12,10 +12,10 @@ categories.workspace = true
 description = "Hand-written, lossless, error-resilient lexer for Snowflake SQL (sql-dialect-fmt toolchain)."
 
 [dependencies]
-sql-dialect-fmt-syntax = { path = "../sql-dialect-fmt-syntax", version = "0.1.0" }
+sql-dialect-fmt-syntax = { path = "../sql-dialect-fmt-syntax", version = "1.0.0" }
 
 [dev-dependencies]
 # Let integration tests call into the syntax crate directly (e.g. keyword_kind).
-sql-dialect-fmt-syntax = { path = "../sql-dialect-fmt-syntax", version = "0.1.0" }
+sql-dialect-fmt-syntax = { path = "../sql-dialect-fmt-syntax", version = "1.0.0" }
 sql-dialect-fmt-test-fixtures = { path = "../sql-dialect-fmt-test-fixtures" }
 sql-dialect-fmt-test-support = { path = "../sql-dialect-fmt-test-support" }

@@ -30,8 +30,9 @@ grammar scopes as a keyword or type must be classified the same way by
 
 ### VS Code extension package
 
-The `editors/` directory is also a minimal VS Code extension root. Package it from this
-directory with `vsce package` (or install it locally with VS Code's "Install from VSIX") to
+The `editors/` directory is also a minimal VS Code extension root. Package both editor
+extensions from the repository root with `./scripts/package-extensions.sh` (or package this
+directory directly with `vsce package`) to
 contribute:
 
 - language id: `snowflake-sql`

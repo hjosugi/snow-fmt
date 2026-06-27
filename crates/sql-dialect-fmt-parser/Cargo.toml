@@ -12,8 +12,8 @@ categories.workspace = true
 description = "Error-resilient, event-based recursive-descent parser building a lossless rowan CST for Snowflake SQL."
 
 [dependencies]
-sql-dialect-fmt-syntax = { path = "../sql-dialect-fmt-syntax", version = "0.1.0", features = ["rowan"] }
-sql-dialect-fmt-lexer = { path = "../sql-dialect-fmt-lexer", version = "0.1.0" }
+sql-dialect-fmt-syntax = { path = "../sql-dialect-fmt-syntax", version = "1.0.0", features = ["rowan"] }
+sql-dialect-fmt-lexer = { path = "../sql-dialect-fmt-lexer", version = "1.0.0" }
 rowan = "0.15"
 
 [dev-dependencies]

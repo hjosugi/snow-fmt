@@ -14,9 +14,9 @@ description = "sql-dialect-fmt: an opinionated SQL dialect formatter (command-li
 [dependencies]
 rayon = "1"
 serde = { version = "1", features = ["derive"] }
-sql-dialect-fmt-encoding = { path = "../sql-dialect-fmt-encoding", version = "0.1.0" }
-sql-dialect-fmt-formatter = { path = "../sql-dialect-fmt-formatter", version = "0.1.0" }
-sql-dialect-fmt-parser = { path = "../sql-dialect-fmt-parser", version = "0.1.0" }
+sql-dialect-fmt-encoding = { path = "../sql-dialect-fmt-encoding", version = "1.0.0" }
+sql-dialect-fmt-formatter = { path = "../sql-dialect-fmt-formatter", version = "1.0.0" }
+sql-dialect-fmt-parser = { path = "../sql-dialect-fmt-parser", version = "1.0.0" }
 toml = "0.8"
 
 [dev-dependencies]

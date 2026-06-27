@@ -14,6 +14,12 @@ From the repository root:
 This builds `sql-dialect-fmt-wasm` for `wasm32-unknown-unknown` and copies the compiled module to
 `extensions/chrome/vendor/sql_dialect_fmt_wasm.wasm`.
 
+To build the release zip (and the VS Code VSIX at the same time), run:
+
+```sh
+./scripts/package-extensions.sh
+```
+
 ## Install Locally
 
 1. Open `chrome://extensions`.

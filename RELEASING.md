@@ -48,9 +48,21 @@ Published to crates.io (in dependency order):
    cargo test --workspace
    cargo clippy --workspace --all-targets -- -D warnings
    cargo fmt --all --check
+   scripts/run-external-corpus.sh --sample
+   scripts/conformance-report.py --path crates/sql-dialect-fmt-formatter/tests/corpus_sample \
+     --out target/conformance-report.md
    ```
 
-4. **Dry-run packaging** of each publishable crate, in dependency order:
+4. **Package release assets**:
+
+   ```sh
+   scripts/package-extensions.sh
+   ```
+
+   This builds the Snowsight Chrome extension zip and the VS Code VSIX under `target/dist/`.
+   The GitHub Release workflow uploads those alongside the CLI tarball and checksum.
+
+5. **Dry-run packaging** of each publishable crate, in dependency order:
 
    ```sh
    cargo publish --dry-run -p sql-dialect-fmt-syntax
@@ -67,7 +79,7 @@ Published to crates.io (in dependency order):
 
    (`cargo package -p <crate>` produces the tarball without the dry-run upload check.)
 
-5. **Commit and tag:**
+6. **Commit and tag:**
 
    ```sh
    git commit -am "release: vX.Y.Z"
@@ -75,7 +87,7 @@ Published to crates.io (in dependency order):
    git push && git push --tags
    ```
 
-6. **Publish in dependency order.** Each `cargo publish` must complete and the new
+7. **Publish in dependency order.** Each `cargo publish` must complete and the new
    version must be indexed before publishing a dependent crate:
 
    ```sh
@@ -94,6 +106,15 @@ Published to crates.io (in dependency order):
    The canonical order is **syntax → lexer → parser → formatter → highlight → hover →
    cli / lsp / wasm** (with `encoding` published any time before `cli`, and `wasm`
    any time after `formatter`).
+
+8. **Store publishing** is manual-dispatch and credential-gated:
+
+   - VS Code Marketplace requires `VSCE_PAT`.
+   - Chrome Web Store requires `CHROME_EXTENSION_ID`, `CHROME_CLIENT_ID`,
+     `CHROME_CLIENT_SECRET`, and `CHROME_REFRESH_TOKEN`.
+
+   Run the `Extension Packages` workflow with `publish=true` only after the initial store listing,
+   publisher identity, privacy disclosures, and permissions review are ready in the store consoles.
 
 ## Notes
 

@@ -100,21 +100,22 @@
 - ✅ `UNDROP <object> <name>`（`UNDROP_STMT`、寛容インライン）。**バグ修正**: `UNDROP SCHEMA s` の複数文分割を解消。fixture `case_036`
 - ✅ `CREATE [OR REPLACE|OR ALTER] MASKING POLICY` / `ROW ACCESS POLICY` / `TAG`（policy は `AS (...) RETURNS ... -> ...` を clean parse + inline formatting、tag は `ALLOWED_VALUES`/`COMMENT`/`PROPAGATE` を property region として整形）。公式 docs で syntax 確認済み。object DDL matrix で parse/format/idempotency/token preservation を検証 … [grammar.rs](crates/sql-dialect-fmt-parser/src/grammar.rs) `create_policy`/`object_property`
 - ✅ `CREATE SEMANTIC VIEW`（公式 docs 確認済み）: `TABLES`/`RELATIONSHIPS`/`FACTS`/`DIMENSIONS`/`METRICS`/AI instruction/`WITH TAG`/`COPY GRANTS` を top-level clause として構造化し、外側 item list を1項目1行に整形。新ノード `SEMANTIC_VIEW_CLAUSE`/`SEMANTIC_VIEW_ITEM`、fixture `case_023` と object DDL matrix で回帰ガード … [grammar.rs](crates/sql-dialect-fmt-parser/src/grammar.rs) `semantic_view_clause` / [sql.rs](crates/sql-dialect-fmt-formatter/src/sql.rs) `lower_semantic_view_clause`
-- ✅ 細かい object option の key-position 認識を拡張（`CONTACT`/`CLASSIFICATION_PROFILE`/`DATA_METRIC_SCHEDULE`/`TASK_AUTO_RETRY_ATTEMPTS`/`TRACE_LEVEL`/semantic AI option 等）。残: 新規 Preview option の継続追随
+- ✅ 細かい object option の key-position 認識を拡張（`CONTACT`/`CLASSIFICATION_PROFILE`/`DATA_METRIC_SCHEDULE`/`TASK_AUTO_RETRY_ATTEMPTS`/`TRACE_LEVEL`/semantic AI option、Preview 系の `AGGREGATION_POLICY`/`JOIN_POLICY`/`PROJECTION_POLICY`/`DATA_METRIC_FUNCTION`/compute pool・policy・default role/warehouse 系 option 等）。将来の Preview option は conformance/report lane で継続追随
 
-## Phase 8 — 手続き・関数・埋め込み言語 🚧 ＜第2の差別化点＞
+## Phase 8 — 手続き・関数・埋め込み言語 ✅ ＜第2の差別化点＞
 - ✅ `CREATE PROCEDURE`/`FUNCTION`（**骨格 + SQL/JS/Python/Java/Scala ボディ整形**: シグネチャ・`RETURNS`・`LANGUAGE`・各種オプションを寛容にトークン保持。`RETURNS TABLE (...)`、`RETURNS ... NOT NULL`、Java/JavaScript stored procedure docs/API 例を回帰テスト化。`LANGUAGE SQL AS $$ … $$` は内部 SQL/Scripting を同じ formatter で再帰整形、`LANGUAGE JAVASCRIPT` は Biome (`biome_js_formatter`)、`LANGUAGE PYTHON` は Ruff (`ruff_python_formatter`)、Java/Scala は brace-aware lightweight formatter に委譲。解析不能時は安全に元 token を保持。single-quoted body も `AS '...'` 直後の body token として JS/Python/Java/Scala/SQL scripting を保守的に整形（SQL expression body は verbatim）。ヘッダは構造的整形・引数は1つ1行）… [grammar.rs](crates/sql-dialect-fmt-parser/src/grammar.rs) `create_routine` / [sql.rs](crates/sql-dialect-fmt-formatter/src/sql.rs) `lower_create_routine` / [routine_body.rs](crates/sql-dialect-fmt-formatter/src/sql/routine_body.rs)
 - ✅ セッション `SET <var> = <expr>` / `SET (a, b) = (...)`、`EXECUTE IMMEDIATE <string|$$…$$|:var> [USING (...)]`（`SET_STMT`/`EXECUTE_STMT` ノード、新キーワード `IMMEDIATE`。式に `DOLLAR_STRING` を許可）。**コーパス clean 20→22件** … [grammar.rs](crates/sql-dialect-fmt-parser/src/grammar.rs) `set_stmt`/`execute_stmt`
 - ✅ `CALL proc(args)`（プロシージャ呼び出し。`CALL_STMT` ノード、呼び出しは通常の call 式として整形＝引数オーバーフロー時は1引数1行、`INTO :var` 等の末尾は寛容保持）。fixture `case_033` … [grammar.rs](crates/sql-dialect-fmt-parser/src/grammar.rs) `call_stmt`
 - ✅ トランザクション制御 `BEGIN`/`COMMIT`/`ROLLBACK`（`BEGIN TRANSACTION`/`BEGIN WORK`/`BEGIN;`、`COMMIT WORK`、`ROLLBACK TO SAVEPOINT …` 含む。`TRANSACTION_STMT`）。**バグ修正**: `COMMIT WORK`/`ROLLBACK TO SAVEPOINT …` の複数文分割を解消。fixture `case_036`/`case_037`。`BEGIN` はコンテキストキーワード `transaction`/`work` か直後 `;` でのみトランザクションと判定し、Scripting ブロック `BEGIN … END`（内部 `;` 区切り）は誤分割せず verbatim 維持 … [grammar.rs](crates/sql-dialect-fmt-parser/src/grammar.rs) `at_begin_transaction`
 - ✅ Snowflake Scripting ブロック本体の整形（トップレベル匿名ブロック）: `[DECLARE …] BEGIN … [EXCEPTION …] END` を構造化し、本体を1文1行・インデント。`IF`/`ELSEIF`/`ELSE`/`END IF`、`CASE`/`WHEN`/`ELSE`/`END CASE`、`FOR`/`WHILE … DO … END`、`LOOP`/`END LOOP`、`REPEAT … UNTIL … END REPEAT`、`EXCEPTION … WHEN … THEN`、ネストブロックを構造的に整形。`LET`/`:=`/`RETURN`/その他は寛容文（`;` まで）として保持。本体内の SQL（`SELECT`/`INSERT`/… ）は通常の構造的整形に委譲。新キーワード `ELSEIF`/`WHILE`/`LOOP`/`REPEAT`/`UNTIL`/`DO`/`EXCEPTION`/`CURSOR`/`RESULTSET`、新ノード `BLOCK_STMT`/`DECLARE_SECTION`/`STMT_LIST`/`IF_STMT`/`CASE_STMT`/`CASE_STMT_WHEN`/`LOOP_STMT`/`EXCEPTION_SECTION`/… 。**安全性**: 寛容文は `;` まで消費するので `LET x := (CASE WHEN … END)` の式内 `END` で誤分割しない。構文が崩れたブロックはパースエラー→**ブロック全体を verbatim**（無破壊）。`BEGIN … END` トランザクションとの曖昧性は維持。fixture `case_038`/`case_039`、parser/formatter で clean-parse/ノード種別/CASE arm layout/誤分割回避/malformed-verbatim を回帰ガード … [grammar.rs](crates/sql-dialect-fmt-parser/src/grammar.rs) `block_stmt`/`if_stmt`/`case_stmt`/`loop_stmt` / [sql.rs](crates/sql-dialect-fmt-formatter/src/sql.rs) `lower_block`/`lower_case_stmt`
-- 🚧 delimiter-aware body token の言語判定 → サブフォーマッタへ委譲 → 再インデント
+- ✅ delimiter-aware body token の言語判定 → サブフォーマッタへ委譲 → 再インデント
   - ✅ **JavaScript**: Biome の `biome_js_formatter` を組み込み（top-level `return` は synthetic function body で処理、失敗時 verbatim）
   - ✅ **Python**: Ruff の `ruff_python_formatter` を組み込み（失敗時 verbatim）
   - ✅ **Java / Scala**: brace-aware lightweight formatter（不均衡 brace/comment/string は verbatim、Java/Scala text block `"""..."""` は brace count から隔離）
   - ✅ ネストした SQL（`LANGUAGE SQL`）: `$$ … $$` body と single-quoted Snowflake Scripting body を自分自身で再帰整形
+  - ✅ quoted Java/Scala body と line/block comment 入り brace body を 1.0 回帰テスト化
 
-## Phase 9 — ハイライト + LSP 🚧
+## Phase 9 — ハイライト + LSP ✅
 - ✅ Lexical highlight 基盤（keyword/type/string/comment/operator/punctuation/range、内蔵 easy fixture 全 SQL でロスレス検証） … [crates/sql-dialect-fmt-highlight/](crates/sql-dialect-fmt-highlight/)
 - ✅ Hover 基盤（Snowflake 型、`CREATE PROCEDURE` の signature/returns/language、`CREATE TASK` の compute/schedule/when、procedure/task property 説明） … [crates/sql-dialect-fmt-hover/](crates/sql-dialect-fmt-hover/)
 - ✅ Tree-sitter grammar baseline（Neovim/Zed/GitHub 向け token grammar、highlight/locals/injections queries、Rust wrapper、内蔵 easy fixture 全 SQL + LF/CRLF/CR/mixed 改行で cargo test 統合） … [tree-sitter-snowflake/](tree-sitter-snowflake/) / [crates/sql-dialect-fmt-tree-sitter/](crates/sql-dialect-fmt-tree-sitter/)
@@ -122,29 +123,31 @@
 - ✅ **LSP サーバ `sql-dialect-fmt-lsp`**（stdio・`lsp-server`/`lsp-types`、同期。`formatting`＝全文整形、`semanticTokens/full`、`publishDiagnostics`＝パースエラー、`hover`＝キーワード/型/シンボル説明（`sql-dialect-fmt-hover` 配線）、`foldingRange`＝文単位。**インクリメンタル同期**（範囲編集を splice）・初期化/シャットダウン。純粋関数はユニットテスト、サーバは stdio エンドツーエンド検証） … [crates/sql-dialect-fmt-lsp/](crates/sql-dialect-fmt-lsp/)
 - ✅ 診断品質: lexer/parser diagnostics は byte span（token 全体、EOF は zero-width）を持ち、`SyntaxKind::INTO_KW` ではなく `expected INTO` / `expected '('` のような人間向け表示へ変換。LSP diagnostics は lexer error（未終端 literal/comment 等）も拾い、UTF-16 range へ変換 … [diagnostics.rs](crates/sql-dialect-fmt-parser/tests/diagnostics.rs) / [kind.rs](crates/sql-dialect-fmt-syntax/src/kind.rs) `describe`
 - ✅ LSP のインクリメンタル更新（`apply_change`＝範囲 splice／全文置換、`TextDocumentSyncKind::INCREMENTAL`） … [crates/sql-dialect-fmt-lsp/](crates/sql-dialect-fmt-lsp/) `apply_change`
+- ✅ LSP lint lane 第一弾（DB 接続なしで安全に出せる warning）: `SELECT *` と巨大 `IN (...)` list を `publishDiagnostics` に warning として追加。将来 catalog snapshot があれば存在しない table/column や nullable join へ拡張
 - ✅ TextMate 文法（素のエディタ向けベースライン。`source.snowflake-sql`、comment/string/`$$…$$`/number/type/keyword/variable/operator をスコープ。キーワード・型語彙は `sql-dialect-fmt-highlight::classify` と一致をテストで機械保証＝drift しない） … [editors/snowflake.tmLanguage.json](editors/snowflake.tmLanguage.json)
 - ✅ Tree-sitter 文法の構造化（第一層: `;` 区切りの `statement` ノードで token 列をグルーピング、第二層: 括弧/即時関数呼び出しを軽量 `expression` node 化。`folds.scm`＝文単位の折りたたみ（LSP `foldingRange` と一致）。`injections.scm` は `LANGUAGE <name> ... AS $$...$$` / `EXECUTE IMMEDIATE $$...$$` を context-aware に注入。`source_file` ルート維持で既存 highlight/locals と互換、corpus＋Rust smoke で検証） … [tree-sitter-snowflake/](tree-sitter-snowflake/)
   - ✅ indents query（`argument_list`/`parenthesized_expression` の `@indent`、`)` の `@dedent`）… [queries/indents.scm](tree-sitter-snowflake/queries/indents.scm)
 
-## Phase 10 — 仕上げ・周辺 🚧
+## Phase 10 — 仕上げ・周辺 ✅
 - ✅ 🔎 Cortex / AISQL 関数（`AI_COMPLETE` などの `AI_*`, `SNOWFLAKE.CORTEX.*(...)`）を LSP semantic token で `function` + `defaultLibrary` として認識（公式 docs 確認済み）… [semantic.rs](crates/sql-dialect-fmt-highlight/src/semantic.rs)
-- ✅ CLI `sql-dialect-fmt`（`--write`/`--check`/stdin、複数ファイル/ディレクトリ再帰、`sql-dialect-fmt.toml` discovery、`--no-config`、`--dialect snowflake|databricks`、`--line-width`/`--indent-width`/`--no-uppercase`/`--uppercase`、エンコーディング保持、error UX、`cargo install` 可、v0.1.0） … [crates/sql-dialect-fmt-cli/](crates/sql-dialect-fmt-cli/)
+- ✅ CLI `sql-dialect-fmt`（`--write`/`--check`/stdin、複数ファイル/ディレクトリ再帰、`sql-dialect-fmt.toml` discovery、`--no-config`、`--dialect snowflake|databricks`、`--line-width`/`--indent-width`/`--no-uppercase`/`--uppercase`、エンコーディング保持、error UX、`cargo install` 可、v1.0.0） … [crates/sql-dialect-fmt-cli/](crates/sql-dialect-fmt-cli/)
 - ✅ 複数ファイル**並列**整形（`rayon`）。処理は並列、stdout/stderr/check 表示は入力順で安定。Criterion ベンチマークは [benches/format.rs](crates/sql-dialect-fmt-formatter/benches/format.rs) で導入済み
 - ✅ 大規模コーパスでのべき等性・無破壊（ラウンドトリップ）回帰（内蔵 easy fixture 全 SQL + always-on sample corpus + external corpus harness `SQL_DIALECT_FMT_EXTERNAL_CORPUS`、docs/CI smoke つき）。GitHub Actions は PR/push/weekly/dispatch で sample または `SQL_DIALECT_FMT_EXTERNAL_CORPUS_URL` の archive を継続実行し、repo variable には pinned public dbt corpus seed を設定済み
 - ✅ エディタ拡張（VS Code）パッケージング（`editors/` を extension root とする `package.json` + `language-configuration.json`）
 - ✅ Snowsight/Chrome 拡張（`sql-dialect-fmt-wasm` を `wasm32-unknown-unknown` でビルドして同梱、worksheet editor 上のボタン/拡張アイコン/`Alt+Shift+F` から整形）… [sql-dialect-fmt-wasm](crates/sql-dialect-fmt-wasm/) / [extensions/chrome](extensions/chrome/) / [build script](scripts/build-chrome-extension.sh)
-- ⏳ 公式仕様由来の conformance generator（Future Tech Blog の `uroborosql-fmt` / `postgresql-cst-parser` 型の発想を Snowflake 向けに翻訳）: Snowflake docs/examples から fixture と keyword/statement delta を生成し、parser-gap report として CI/ROADMAP 更新へつなぐ。将来、機械可読な公式 grammar が得られるなら Pure Rust CST parser 生成の候補にする。
-- ⏳ LSP lint lane: まず DB 接続なしで可能な警告（巨大 `IN` list、危険な wildcard、曖昧な object option など）から始め、将来 catalog snapshot があれば存在しない table/column や nullable join の診断へ拡張。
+- ✅ GitHub Release asset: CLI tarball + sha256、Chrome zip、VS Code VSIX を `v*.*.*` release に同梱。旧 `snow-fmt-*` asset は除去済み
+- ✅ VS Code Marketplace / Chrome Web Store publish workflow: manual dispatch で package artifact を作成し、`VSCE_PAT` / Chrome Web Store OAuth secrets がある場合のみ本公開。初回 listing/審査は各 store 側の管理画面で完了させる
+- ✅ 公式仕様由来の conformance generator（Future Tech Blog の `uroborosql-fmt` / `postgresql-cst-parser` 型の発想を Snowflake 向けに翻訳）: local path / archive から `.sql` と SQL fenced block を抽出し、外部 corpus harness に流して parser/formatter conformance report を生成。将来、機械可読な公式 grammar が得られるなら Pure Rust CST parser 生成の候補にする … [scripts/conformance-report.py](scripts/conformance-report.py)
 
 ---
 
-### 現状サマリ（2026-06）
-**Phase 0–6 は完了**、Phase 7 は Semantic View を含む主要 DDL/object DDL/access control まで実用域、Phase 8 は主要 routine body delimiter/language を保守的に整形、Phase 9/10 は LSP/editor/CLI 並列/外部 corpus harness/Chrome+WASM まで実用域。コア整形（SELECT 一式・DML・基本 DDL・object DDL・COPY・Snowflake 固有クエリ）は無破壊・べき等を property test まで含めて機械保証しつつ実用段階。Databricks mode は LATERAL VIEW / Delta DDL options / VERSION・TIMESTAMP AS OF / lambda / backtick identifier の第一弾を実装済み。CLI `sql-dialect-fmt` v0.1.0 公開可。
+### 現状サマリ（2026-06-27）
+**v1.0.0 到達**。Phase 0–10 の 1.0 scope は完了: コア整形（SELECT 一式・DML・基本 DDL・object DDL・COPY・Snowflake 固有クエリ）は無破壊・べき等を property test まで含めて機械保証しつつ実用段階。Databricks mode は LATERAL VIEW / Delta DDL options / VERSION・TIMESTAMP AS OF / lambda / backtick identifier を dialect mode で実装済み。LSP/editor/CLI/Chrome+WASM/VSIX/GitHub Release/外部 corpus/conformance report まで 1.0 配布面を整備済み。
 
-**残りの主な未着手（価値順）**:
-1. **網羅強化**: Semantic View/Preview object option の継続追随、公開可能な外部コーパスの継続運用。
-2. **公式仕様由来の追随基盤**: Snowflake docs/examples miner → fixture/keyword delta/parser-gap report。将来的に Pure Rust CST parser 生成へつなげる余地を残す。
-3. **Routine body polish**: quoted body と Java/Scala formatter の限界ケース拡張。
-4. **Directive polish**: 必要なら `-- sql-dialect-fmt: off/on` の範囲制御など細部。
+**1.0 後の継続タスク（リリース blocker ではない）**:
+1. **Store 運用**: Chrome Web Store / VS Code Marketplace は workflow 済み。初回 listing・審査・publisher 権限・OAuth/PAT secrets を repo に設定したら本公開できる。
+2. **仕様追随**: Snowflake Preview option / Semantic View / Cortex-AISQL の追加は conformance generator と外部 corpus の継続運用で追う。
+3. **Directive polish**: 必要なら `-- sql-dialect-fmt: off/on` の範囲制御など細部。
+4. **研究開発**: もし機械可読な公式 grammar が得られた場合のみ、Pure Rust CST parser 生成の feasibility を再評価。
 
 回帰ゲートは `cargo test --workspace`（golden=insta、full/sql-only、lexer/parser recovery、lexical highlight、Tree-sitter、formatter べき等/ラウンドトリップ）＋ `cargo clippy --workspace --all-targets` ＋ `cargo fmt --all --check`。

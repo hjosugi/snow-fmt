@@ -2250,7 +2250,7 @@ checksum = "8ed6a63f02c8539c91a8685a86f4099661ba3da017932f6ebbea6de3f0fa7c90"
 
 [[package]]
 name = "sql-dialect-fmt"
-version = "0.1.0"
+version = "1.0.0"
 dependencies = [
  "rayon",
  "serde",
@@ -2263,11 +2263,11 @@ dependencies = [
 
 [[package]]
 name = "sql-dialect-fmt-encoding"
-version = "0.1.0"
+version = "1.0.0"
 
 [[package]]
 name = "sql-dialect-fmt-formatter"
-version = "0.1.0"
+version = "1.0.0"
 dependencies = [
  "biome_console",
  "biome_deserialize",
@@ -2299,7 +2299,7 @@ dependencies = [
 
 [[package]]
 name = "sql-dialect-fmt-highlight"
-version = "0.1.0"
+version = "1.0.0"
 dependencies = [
  "serde_json",
  "sql-dialect-fmt-lexer",
@@ -2310,7 +2310,7 @@ dependencies = [
 
 [[package]]
 name = "sql-dialect-fmt-hover"
-version = "0.1.0"
+version = "1.0.0"
 dependencies = [
  "sql-dialect-fmt-lexer",
  "sql-dialect-fmt-syntax",
@@ -2318,7 +2318,7 @@ dependencies = [
 
 [[package]]
 name = "sql-dialect-fmt-lexer"
-version = "0.1.0"
+version = "1.0.0"
 dependencies = [
  "sql-dialect-fmt-syntax",
  "sql-dialect-fmt-test-fixtures",
@@ -2327,7 +2327,7 @@ dependencies = [
 
 [[package]]
 name = "sql-dialect-fmt-lsp"
-version = "0.1.0"
+version = "1.0.0"
 dependencies = [
  "lsp-server",
  "lsp-types",
@@ -2342,7 +2342,7 @@ dependencies = [
 
 [[package]]
 name = "sql-dialect-fmt-parser"
-version = "0.1.0"
+version = "1.0.0"
 dependencies = [
  "proptest",
  "rowan",
@@ -2354,18 +2354,18 @@ dependencies = [
 
 [[package]]
 name = "sql-dialect-fmt-syntax"
-version = "0.1.0"
+version = "1.0.0"
 dependencies = [
  "rowan",
 ]
 
 [[package]]
 name = "sql-dialect-fmt-test-fixtures"
-version = "0.1.0"
+version = "1.0.0"
 
 [[package]]
 name = "sql-dialect-fmt-test-support"
-version = "0.1.0"
+version = "1.0.0"
 dependencies = [
  "sql-dialect-fmt-highlight",
  "sql-dialect-fmt-lexer",
@@ -2374,7 +2374,7 @@ dependencies = [
 
 [[package]]
 name = "sql-dialect-fmt-tree-sitter"
-version = "0.1.0"
+version = "1.0.0"
 dependencies = [
  "cc",
  "sql-dialect-fmt-test-fixtures",
@@ -2384,7 +2384,7 @@ dependencies = [
 
 [[package]]
 name = "sql-dialect-fmt-wasm"
-version = "0.1.0"
+version = "1.0.0"
 dependencies = [
  "sql-dialect-fmt-formatter",
 ]
