@@ -36,12 +36,24 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         run: |
           v="${{ steps.version.outputs.version }}"
-          # When dispatched, the tag does not exist yet; --target creates it at this commit.
-          # When triggered by a tag push, the tag already exists and --target is ignored.
-          gh release create "$v" \
-            --repo "${{ github.repository }}" \
-            --target "${{ github.sha }}" \
-            --title "$v" \
-            --generate-notes \
-            "sql-dialect-fmt-$v-x86_64-unknown-linux-gnu.tar.gz" \
-            "sql-dialect-fmt-$v-x86_64-unknown-linux-gnu.tar.gz.sha256"
+          if gh release view "$v" --repo "${{ github.repository }}" >/dev/null 2>&1; then
+            gh release edit "$v" \
+              --repo "${{ github.repository }}" \
+              --target "${{ github.sha }}" \
+              --title "$v"
+            gh release upload "$v" \
+              --repo "${{ github.repository }}" \
+              --clobber \
+              "sql-dialect-fmt-$v-x86_64-unknown-linux-gnu.tar.gz" \
+              "sql-dialect-fmt-$v-x86_64-unknown-linux-gnu.tar.gz.sha256"
+          else
+            # When dispatched, the tag does not exist yet; --target creates it at this commit.
+            # When triggered by a tag push, the tag already exists and --target is ignored.
+            gh release create "$v" \
+              --repo "${{ github.repository }}" \
+              --target "${{ github.sha }}" \
+              --title "$v" \
+              --generate-notes \
+              "sql-dialect-fmt-$v-x86_64-unknown-linux-gnu.tar.gz" \
+              "sql-dialect-fmt-$v-x86_64-unknown-linux-gnu.tar.gz.sha256"
+          fi
