@@ -110,6 +110,19 @@ fn routine_bodies_cover_all_supported_languages_and_unquoted_scripting() {
 }
 
 #[test]
+fn show_statement_can_start_a_flow_chain() {
+    let p = parse("SHOW TABLES IN SCHEMA db.s ->> SELECT \"name\" FROM $1");
+    assert!(p.errors().is_empty(), "{:?}", p.errors());
+    assert!(
+        p.syntax()
+            .descendants()
+            .any(|node| node.kind() == SyntaxKind::FLOW_STMT),
+        "expected SHOW ->> SELECT to parse as a FLOW_STMT: {}",
+        p.syntax()
+    );
+}
+
+#[test]
 fn let_with_case_expression_is_not_split_at_inner_end() {
     // A `LET`/assignment whose right-hand side is a `CASE … END` expression must be one statement —
     // consume-to-`;` must not stop at the expression's inner `END`.

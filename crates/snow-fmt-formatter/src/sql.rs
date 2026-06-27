@@ -512,7 +512,12 @@ impl Lowerer {
         // Properties / clauses that stack one-per-line, indented under the CREATE header.
         let has_props = node
             .children()
-            .any(|c| matches!(c.kind(), OBJECT_PROPERTY | STREAM_SOURCE | TASK_AFTER));
+            .any(|c| {
+                matches!(
+                    c.kind(),
+                    OBJECT_PROPERTY | STREAM_SOURCE | TASK_AFTER | SEMANTIC_VIEW_CLAUSE
+                )
+            });
         if has_props {
             return self.lower_create_object(node);
         }
@@ -540,19 +545,19 @@ impl Lowerer {
                 if token.kind().is_trivia() {
                     continue;
                 }
-                if token.kind() == DOLLAR_STRING {
+                if matches!(token.kind(), DOLLAR_STRING | STRING) && prev_sig == Some(AS_KW) {
                     if let Some(formatted) = match body_language {
                         RoutineBodyLanguage::Sql => {
-                            format_embedded_sql_dollar_body(token.text(), self.ctx)
+                            format_embedded_sql_body_token(token.text(), self.ctx)
                         }
                         RoutineBodyLanguage::Javascript => {
-                            format_embedded_javascript_dollar_body(token.text(), self.ctx)
+                            format_embedded_javascript_body_token(token.text(), self.ctx)
                         }
                         RoutineBodyLanguage::Python => {
-                            format_embedded_python_dollar_body(token.text(), self.ctx)
+                            format_embedded_python_body_token(token.text(), self.ctx)
                         }
                         RoutineBodyLanguage::Java | RoutineBodyLanguage::Scala => {
-                            format_embedded_brace_language_dollar_body(token.text(), self.ctx)
+                            format_embedded_brace_language_body_token(token.text(), self.ctx)
                         }
                         RoutineBodyLanguage::Other => None,
                     } {
@@ -595,7 +600,7 @@ impl Lowerer {
                     // stay inline on the CREATE header.
                     NAME | NAME_REF | COLUMN_DEF_LIST => head.push(self.lower_node(&node)),
                     // Properties and sub-clauses each break onto their own indented line.
-                    OBJECT_PROPERTY | STREAM_SOURCE | TASK_AFTER => {
+                    OBJECT_PROPERTY | STREAM_SOURCE | TASK_AFTER | SEMANTIC_VIEW_CLAUSE => {
                         self.reset();
                         clauses.push(concat(vec![hard_line(), self.lower_node(&node)]));
                     }
@@ -1010,6 +1015,7 @@ impl Lowerer {
             GRANT_STMT | REVOKE_STMT => self.lower_grant(node),
             COPY_STMT => self.lower_copy(node),
             COPY_OPTION | OBJECT_PROPERTY => self.lower_option_node(node),
+            SEMANTIC_VIEW_CLAUSE => self.lower_semantic_view_clause(node),
             COPY_LOCATION => self.lower_copy_location(node),
             STAGE_REF => self.lower_stage_ref(node),
             COLUMN_DEF_LIST => concat(vec![space(), self.lower_column_def_list(node)]),
@@ -1102,6 +1108,56 @@ impl Lowerer {
         // Otherwise a recognized key in `KEY = …` (any nesting) or the `=`-less `START WITH n` /
         // `INCREMENT BY n` sequence forms (key word immediately followed by the `WITH`/`BY` word).
         matches!(next, Some(EQ | WITH_KW | BY_KW)) && is_option_key(word)
+    }
+
+    /// A `CREATE SEMANTIC VIEW` top-level clause. The parser gives us the outer clause and the
+    /// top-level comma items; each item body remains a lossless token run because the semantic-view
+    /// grammar embeds table references, metric expressions, and verified-query metadata.
+    fn lower_semantic_view_clause(&mut self, node: &SyntaxNode) -> Doc {
+        let mut head = Vec::new();
+        let mut items = Vec::new();
+        let mut saw_parens = false;
+
+        for child in node.children_with_tokens() {
+            if let Some(token) = child.as_token() {
+                if token.kind().is_trivia() || token.kind() == COMMA {
+                    continue;
+                }
+                match token.kind() {
+                    L_PAREN => saw_parens = true,
+                    R_PAREN => {}
+                    _ if !saw_parens => head.push(self.token(token)),
+                    _ => head.push(self.token(token)),
+                }
+            } else if let Some(node) = child.as_node() {
+                if node.kind() == SEMANTIC_VIEW_ITEM {
+                    self.reset();
+                    items.push(self.lower_node(node));
+                } else {
+                    head.push(self.lower_node(node));
+                }
+            }
+        }
+
+        if !saw_parens {
+            return concat(head);
+        }
+
+        self.resume_after(R_PAREN);
+        let body = if items.is_empty() {
+            text("()")
+        } else {
+            concat(vec![
+                text("("),
+                indent(concat(vec![
+                    hard_line(),
+                    join(concat(vec![text(","), hard_line()]), items),
+                ])),
+                hard_line(),
+                text(")"),
+            ])
+        };
+        concat(vec![concat(head), space(), body])
     }
 
     /// The generic fallback: emit a node's significant tokens with spacing, recursing into child
@@ -1523,8 +1579,55 @@ const ROUTINE_HEADER_WORDS: &[&str] = &[
     "volatile",
 ];
 
-fn format_embedded_javascript_dollar_body(text: &str, ctx: Ctx) -> Option<String> {
-    let body = text.strip_prefix("$$")?.strip_suffix("$$")?;
+fn body_token_content(text: &str) -> Option<String> {
+    if let Some(body) = text.strip_prefix("$$").and_then(|body| body.strip_suffix("$$")) {
+        return Some(body.to_string());
+    }
+    decode_single_quoted_string(text)
+}
+
+fn render_body_token(original: &str, formatted: &str) -> Option<String> {
+    if original.starts_with("$$") {
+        Some(format!("$$\n{formatted}\n$$"))
+    } else if original.starts_with('\'') {
+        Some(format!("'\n{}\n'", encode_single_quoted_string_body(formatted)))
+    } else {
+        None
+    }
+}
+
+fn decode_single_quoted_string(text: &str) -> Option<String> {
+    let inner = text.strip_prefix('\'')?.strip_suffix('\'')?;
+    let mut out = String::with_capacity(inner.len());
+    let mut chars = inner.chars().peekable();
+    while let Some(ch) = chars.next() {
+        if ch == '\'' {
+            if chars.peek() == Some(&'\'') {
+                chars.next();
+                out.push('\'');
+            } else {
+                return None;
+            }
+        } else if ch == '\\' {
+            // Keep backslash escapes literal. If they are required to make the embedded source
+            // parse, the language formatter will reject and the original token stays verbatim.
+            out.push(ch);
+            if let Some(next) = chars.next() {
+                out.push(next);
+            }
+        } else {
+            out.push(ch);
+        }
+    }
+    Some(out)
+}
+
+fn encode_single_quoted_string_body(text: &str) -> String {
+    text.replace('\'', "''")
+}
+
+fn format_embedded_javascript_body_token(text: &str, ctx: Ctx) -> Option<String> {
+    let body = body_token_content(text)?;
     let source = body.trim();
     if source.is_empty() {
         return None;
@@ -1535,7 +1638,7 @@ fn format_embedded_javascript_dollar_body(text: &str, ctx: Ctx) -> Option<String
         return None;
     }
 
-    Some(format!("$$\n{}\n$$", formatted.trim_end()))
+    render_body_token(text, formatted.trim_end())
 }
 
 fn format_javascript_body_once(source: &str, ctx: Ctx) -> Option<String> {
@@ -1570,8 +1673,8 @@ fn format_javascript_body_once(source: &str, ctx: Ctx) -> Option<String> {
     }
 }
 
-fn format_embedded_python_dollar_body(text: &str, ctx: Ctx) -> Option<String> {
-    let body = text.strip_prefix("$$")?.strip_suffix("$$")?;
+fn format_embedded_python_body_token(text: &str, ctx: Ctx) -> Option<String> {
+    let body = body_token_content(text)?;
     let source = body.trim();
     if source.is_empty() {
         return None;
@@ -1582,7 +1685,7 @@ fn format_embedded_python_dollar_body(text: &str, ctx: Ctx) -> Option<String> {
         return None;
     }
 
-    Some(format!("$$\n{}\n$$", formatted.trim_end()))
+    render_body_token(text, formatted.trim_end())
 }
 
 fn format_python_body_once(source: &str, ctx: Ctx) -> Option<String> {
@@ -1603,8 +1706,8 @@ fn format_python_body_once(source: &str, ctx: Ctx) -> Option<String> {
     }
 }
 
-fn format_embedded_brace_language_dollar_body(text: &str, ctx: Ctx) -> Option<String> {
-    let body = text.strip_prefix("$$")?.strip_suffix("$$")?;
+fn format_embedded_brace_language_body_token(text: &str, ctx: Ctx) -> Option<String> {
+    let body = body_token_content(text)?;
     let source = body.trim();
     if source.is_empty() {
         return None;
@@ -1615,14 +1718,10 @@ fn format_embedded_brace_language_dollar_body(text: &str, ctx: Ctx) -> Option<St
         return None;
     }
 
-    Some(format!("$$\n{}\n$$", formatted.trim_end()))
+    render_body_token(text, formatted.trim_end())
 }
 
 fn format_brace_language_body_once(source: &str, indent_width: usize) -> Option<String> {
-    if source.contains("\"\"\"") {
-        return None;
-    }
-
     let mut rough = String::new();
     let mut chars = source.chars().peekable();
     let mut paren_depth = 0usize;
@@ -1631,6 +1730,12 @@ fn format_brace_language_body_once(source: &str, indent_width: usize) -> Option<
 
     while let Some(ch) = chars.next() {
         match ch {
+            '"' if starts_triple_quote(&chars) => {
+                rough.push_str("\"\"\"");
+                chars.next()?;
+                chars.next()?;
+                copy_triple_quoted_literal(&mut chars, &mut rough)?;
+            }
             '"' | '\'' => {
                 rough.push(ch);
                 copy_quoted_literal(ch, &mut chars, &mut rough)?;
@@ -1747,6 +1852,30 @@ fn copy_quoted_literal(
     None
 }
 
+fn starts_triple_quote(chars: &std::iter::Peekable<std::str::Chars<'_>>) -> bool {
+    let mut lookahead = chars.clone();
+    lookahead.next() == Some('"') && lookahead.next() == Some('"')
+}
+
+fn copy_triple_quoted_literal(
+    chars: &mut std::iter::Peekable<std::str::Chars<'_>>,
+    out: &mut String,
+) -> Option<()> {
+    let mut quote_run = 0u8;
+    for ch in chars.by_ref() {
+        out.push(ch);
+        if ch == '"' {
+            quote_run += 1;
+            if quote_run == 3 {
+                return Some(());
+            }
+        } else {
+            quote_run = 0;
+        }
+    }
+    None
+}
+
 fn push_newline_if_needed(out: &mut String) {
     if !out.ends_with('\n') {
         out.push('\n');
@@ -1764,10 +1893,13 @@ fn ensure_newline_before(out: &mut String) {
     }
 }
 
-fn format_embedded_sql_dollar_body(text: &str, ctx: Ctx) -> Option<String> {
-    let body = text.strip_prefix("$$")?.strip_suffix("$$")?;
+fn format_embedded_sql_body_token(text: &str, ctx: Ctx) -> Option<String> {
+    let body = body_token_content(text)?;
     let source = body.trim();
     if source.is_empty() {
+        return None;
+    }
+    if text.starts_with('\'') && !is_sql_scripting_body(source) {
         return None;
     }
     let lexed = snow_fmt_lexer::tokenize(source);
@@ -1794,8 +1926,23 @@ fn format_embedded_sql_dollar_body(text: &str, ctx: Ctx) -> Option<String> {
     if formatted.is_empty() {
         None
     } else {
-        Some(format!("$$\n{formatted}$$"))
+        let formatted = formatted.trim_end();
+        if text.starts_with("$$") {
+            Some(format!("$$\n{formatted}\n$$"))
+        } else {
+            Some(format!(
+                "'\n{}\n'",
+                encode_single_quoted_string_body(formatted)
+            ))
+        }
     }
+}
+
+fn is_sql_scripting_body(source: &str) -> bool {
+    source
+        .split_whitespace()
+        .next()
+        .is_some_and(|word| word.eq_ignore_ascii_case("begin") || word.eq_ignore_ascii_case("declare"))
 }
 
 /// Token text, upper-cased if it is a keyword and keyword-casing is enabled.
@@ -1844,6 +1991,9 @@ fn is_option_flag(word: &str) -> bool {
 /// already-reserved leading keyword and the `WITH`/`BY` connector, so only single identifier words
 /// live here.) Verified against docs.snowflake.com.
 const OPTION_KEYS: &[&str] = &[
+    "ai_question_categorization",
+    "ai_sql_generation",
+    "ai_verified_queries",
     "allow_duplicate",
     "allowed_values",
     "append_only",
@@ -1854,10 +2004,14 @@ const OPTION_KEYS: &[&str] = &[
     "binary_as_text",
     "binary_format",
     "catalog",
+    "change_tracking",
+    "classification_profile",
     "comment",
     "compression",
     "config",
+    "contact",
     "credentials",
+    "data_metric_schedule",
     "data_retention_time_in_days",
     "date_format",
     "default_ddl_collation",
@@ -1876,8 +2030,10 @@ const OPTION_KEYS: &[&str] = &[
     "error_on_column_count_mismatch",
     "escape",
     "escape_unenclosed_field",
+    "event_table",
     "execute_as",
     "exempt_other_policies",
+    "external_table_auto_refresh",
     "external_volume",
     "field_delimiter",
     "field_optionally_enclosed_by",
@@ -1909,6 +2065,7 @@ const OPTION_KEYS: &[&str] = &[
     "overwrite",
     "parse_header",
     "pattern",
+    "pipe_execution_paused",
     "preserve_space",
     "propagate",
     "purge",
@@ -1923,6 +2080,8 @@ const OPTION_KEYS: &[&str] = &[
     "runtime_version",
     "scaling_policy",
     "schedule",
+    "serverless_task_max_statement_size",
+    "serverless_task_min_statement_size",
     "show_initial_rows",
     "single",
     "size_limit",
@@ -1940,8 +2099,10 @@ const OPTION_KEYS: &[&str] = &[
     "suspend_task_after_num_failures",
     "target_completion_interval",
     "target_lag",
+    "task_auto_retry_attempts",
     "time_format",
     "timestamp_format",
+    "trace_level",
     "trim_space",
     "truncatecolumns",
     "type",
@@ -1949,6 +2110,7 @@ const OPTION_KEYS: &[&str] = &[
     "use_logical_type",
     "use_vectorized_scanner",
     "user_task_managed_initial_warehouse_size",
+    "user_task_minimum_trigger_interval_in_seconds",
     "user_task_timeout_ms",
     "validation_mode",
     "warehouse",

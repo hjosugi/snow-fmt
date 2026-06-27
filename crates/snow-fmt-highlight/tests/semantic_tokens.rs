@@ -33,6 +33,8 @@ const CASES: &[&str] = &[
     "SELECT v['key'][0]::NUMBER FROM t",
     "SELECT a::NUMBER(38,0), b::VARCHAR FROM t",
     "SELECT col -> col2, fn(x => 1) FROM t",
+    "SELECT AI_COMPLETE('claude-4-sonnet', 'summarize this') AS answer",
+    "SELECT SNOWFLAKE.CORTEX.COMPLETE('claude-4-sonnet', 'summarize this') AS answer",
     "SELECT a ->> b FROM t",
     "SELECT 'long' || 'oat' AS s",
     "SELECT a |> b FROM t",
@@ -242,6 +244,31 @@ fn semantic_token_mapping_agrees_with_classify() {
     }
     for kind in [Whitespace, Punctuation, Error] {
         assert!(semantic_token(kind).is_none());
+    }
+}
+
+#[test]
+fn cortex_and_aisql_functions_are_default_library_functions() {
+    for (sql, fn_name) in [
+        (
+            "SELECT AI_COMPLETE('claude-4-sonnet', 'summarize this')",
+            "AI_COMPLETE",
+        ),
+        (
+            "SELECT SNOWFLAKE.CORTEX.COMPLETE('claude-4-sonnet', 'summarize this')",
+            "COMPLETE",
+        ),
+    ] {
+        let sem = semantic_tokens(sql);
+        let token = sem
+            .tokens
+            .iter()
+            .find(|token| &sql[token.range.clone()] == fn_name)
+            .expect("function token");
+        assert_eq!(token.token_type, SemanticTokenType::Function);
+        assert!(token
+            .modifiers
+            .contains(SemanticTokenModifiers::DEFAULT_LIBRARY));
     }
 }
 

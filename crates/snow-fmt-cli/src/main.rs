@@ -26,6 +26,7 @@ use std::io::{self, Read, Write};
 use std::path::{Path, PathBuf};
 use std::process::ExitCode;
 
+use rayon::prelude::*;
 use snow_fmt_formatter::FormatOptions;
 
 use config::Config;
@@ -154,41 +155,48 @@ struct Summary {
     with_errors: usize,
 }
 
+struct FileOutcome {
+    formatted_stdout: Vec<u8>,
+    changed: bool,
+    written: bool,
+    parse_errors: Vec<String>,
+}
+
 fn run_paths(args: &Args) -> Result<ExitCode, String> {
     let files = collect_files(&args.paths)?;
+    let outcomes = files
+        .par_iter()
+        .map(|file| process_file(args, file))
+        .collect::<Result<Vec<_>, _>>()?;
+
     let mut summary = Summary::default();
     let mut stdout = io::stdout().lock();
 
-    for file in &files {
-        let options = options_for(args, Some(file))?;
-        let source =
-            fs::read(file).map_err(|err| format!("failed to read {}: {err}", file.display()))?;
-
-        if report_parse_errors(&source, Some(file)) {
+    for (file, outcome) in files.iter().zip(outcomes) {
+        for error in &outcome.parse_errors {
+            eprintln!("{error}");
+        }
+        if !outcome.parse_errors.is_empty() {
             summary.with_errors += 1;
         }
-        let formatted = format_bytes(&source, &options);
         summary.total += 1;
-        let changed = formatted != source;
 
         if args.check {
-            if changed {
+            if outcome.changed {
                 eprintln!("{} is not formatted", file.display());
                 summary.would_change += 1;
             } else {
                 summary.unchanged += 1;
             }
         } else if args.write {
-            if changed {
-                fs::write(file, &formatted)
-                    .map_err(|err| format!("failed to write {}: {err}", file.display()))?;
+            if outcome.written {
                 summary.written += 1;
             } else {
                 summary.unchanged += 1;
             }
         } else {
             stdout
-                .write_all(&formatted)
+                .write_all(&outcome.formatted_stdout)
                 .map_err(|err| format!("failed to write stdout: {err}"))?;
         }
     }
@@ -224,6 +232,33 @@ fn run_paths(args: &Args) -> Result<ExitCode, String> {
         return Ok(ExitCode::from(EXIT_CHECK_FAILED));
     }
     Ok(ExitCode::SUCCESS)
+}
+
+fn process_file(args: &Args, file: &Path) -> Result<FileOutcome, String> {
+    let options = options_for(args, Some(file))?;
+    let source =
+        fs::read(file).map_err(|err| format!("failed to read {}: {err}", file.display()))?;
+    let parse_errors = collect_parse_error_messages(&source, Some(file));
+    let formatted = format_bytes(&source, &options);
+    let changed = formatted != source;
+    let mut written = false;
+
+    if args.write && changed {
+        fs::write(file, &formatted)
+            .map_err(|err| format!("failed to write {}: {err}", file.display()))?;
+        written = true;
+    }
+
+    Ok(FileOutcome {
+        formatted_stdout: if args.write || args.check {
+            Vec::new()
+        } else {
+            formatted
+        },
+        changed,
+        written,
+        parse_errors,
+    })
 }
 
 fn errors_suffix(with_errors: usize) -> String {
@@ -301,28 +336,38 @@ fn is_sql_file(path: &Path) -> bool {
 /// It exists purely so malformed input is *visible* instead of silently passing through. Opaque
 /// (non-text) bytes are skipped — there is nothing to parse.
 fn report_parse_errors(source: &[u8], file: Option<&Path>) -> bool {
+    let messages = collect_parse_error_messages(source, file);
+    for message in &messages {
+        eprintln!("{message}");
+    }
+    !messages.is_empty()
+}
+
+fn collect_parse_error_messages(source: &[u8], file: Option<&Path>) -> Vec<String> {
     let decoded = snow_fmt_encoding::DecodedText::decode(source);
     let Some(text) = decoded.as_str() else {
-        return false;
+        return Vec::new();
     };
     let parse = snow_fmt_parser::parse(text);
     let errors = parse.errors();
     if errors.is_empty() {
-        return false;
+        return Vec::new();
     }
 
     let where_ = match file {
         Some(path) => path.display().to_string(),
         None => "<stdin>".to_string(),
     };
-    for error in errors {
+    errors
+        .iter()
+        .map(|error| {
         let (line, col) = line_col(text, error.offset);
-        eprintln!(
+            format!(
             "snow-fmt: parse error in {where_}:{line}:{col}: {}",
             error.message
-        );
-    }
-    true
+            )
+        })
+        .collect()
 }
 
 /// Translate a byte offset into 1-based line and column numbers (columns counted in `char`s).

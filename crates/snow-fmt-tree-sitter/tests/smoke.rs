@@ -30,6 +30,10 @@ SELECT * FROM rollup
         sql: "SELECT * FROM events |> WHERE payload:type = 'click' |> LIMIT 10;",
     },
     SqlCase {
+        name: "show statement starts a flow chain",
+        sql: "SHOW TABLES IN SCHEMA db.s ->> SELECT \"name\" FROM $1;",
+    },
+    SqlCase {
         name: "copy into stage with file format options",
         sql: r#"COPY INTO @~/exports
 FROM (SELECT id, payload FROM raw.events)
@@ -288,6 +292,8 @@ fn highlight_and_support_queries_compile() {
     Query::new(&language, snow_fmt_tree_sitter::INJECTIONS_QUERY)
         .expect("injections query compiles");
     Query::new(&language, snow_fmt_tree_sitter::FOLDS_QUERY).expect("folds query compiles");
+    let indents = Query::new(&language, snow_fmt_tree_sitter::INDENTS_QUERY)
+        .expect("indents query compiles");
 
     let names = highlights.capture_names();
     for required in [
@@ -306,6 +312,10 @@ fn highlight_and_support_queries_compile() {
             "missing highlight capture {required}"
         );
     }
+
+    let indent_names = indents.capture_names();
+    assert!(indent_names.contains(&"indent"));
+    assert!(indent_names.contains(&"dedent"));
 }
 
 #[test]
@@ -337,8 +347,19 @@ fn expression_nodes_group_calls_and_parentheses() {
 
 #[test]
 fn unbalanced_parentheses_still_tokenize_for_mid_edit_sql() {
-    assert_parse_ok_named("unbalanced open paren", "SELECT (");
-    assert_parse_ok_named("unbalanced close paren", "SELECT )");
+    for (name, sql) in [
+        ("unbalanced open paren", "SELECT ("),
+        ("unbalanced close paren", "SELECT )"),
+    ] {
+        let tree = parse(sql);
+        let root = tree.root_node();
+        assert_eq!(root.kind(), "source_file", "{name} root kind");
+        assert_eq!(
+            root.end_byte(),
+            sql.len(),
+            "{name} did not consume the full input"
+        );
+    }
 }
 
 #[test]

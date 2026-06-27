@@ -48,6 +48,7 @@ const CASES: &[&str] = &[
     "create or replace schema s",
     "create schema if not exists s",
     "create or replace schema if not exists analytics comment = 'core'",
+    "create schema governed contact = 'analytics@example.com' classification_profile = 'pii'",
     "create database d",
     "create database if not exists d comment = 'warehouse db'",
     "create transient schema staging data_retention_time_in_days = 1",
@@ -83,11 +84,14 @@ const CASES: &[&str] = &[
     "create task fan after a, b, c as delete from staging where done",
     "create task guarded warehouse = w schedule = '1 minute' when system$stream_has_data('s') as merge into tgt using src on tgt.id = src.id when matched then update set tgt.v = src.v",
     "create task u warehouse = w as update t set c = 1 where id > 0",
+    "create task resilient warehouse = w task_auto_retry_attempts = 3 user_task_minimum_trigger_interval_in_seconds = 60 trace_level = always as select 1",
     // ---- CREATE DYNAMIC TABLE: TARGET_LAG / WAREHOUSE + AS <query> ----
     "create dynamic table dt target_lag = '1 minute' warehouse = w as select a from t",
     "create or replace dynamic table dt target_lag = 'DOWNSTREAM' warehouse = w refresh_mode = auto as select a, b from t where a > 0",
     "create dynamic table dt (a, b) target_lag = '20 minutes' warehouse = w as select x, y from src",
     "create dynamic table dt target_lag = '1 hour' warehouse = w as with c as (select 1 as n) select n from c",
+    // ---- CREATE SEMANTIC VIEW: semantic model clauses and AI instruction clauses ----
+    "create semantic view sv tables(orders as mart.orders primary key(order_id), customers as mart.customers primary key(customer_id)) relationships(order_customer as orders(customer_id) references customers) facts(public orders.net_amount as net_amount) dimensions(public customers.region as region) metrics(public orders.revenue as sum(orders.net_amount)) comment = 'semantic model' ai_sql_generation 'Use revenue for sales questions.' ai_question_categorization 'Classify revenue questions.' ai_verified_queries(top_revenue as(question 'Top revenue?' verified_at 1767225600 onboarding_question true verified_by 'analyst@example.com' sql 'SELECT 1')) with tag(governance.owner = 'analytics') copy grants",
     // ---- CREATE MASKING / ROW ACCESS POLICY: inline policy signature/body, clean parse ----
     "create masking policy mask_email as (val STRING) returns STRING -> case when current_role() in ('ANALYST') then val else '***' end",
     "create or replace masking policy mask_email as (val STRING) returns STRING -> val comment = 'mask'",
@@ -200,6 +204,20 @@ fn create_object_stacks_each_property() {
 }
 
 #[test]
+fn newer_object_options_upcase_in_key_position() {
+    assert_eq!(
+        fmt("create task resilient warehouse = w task_auto_retry_attempts = 3 user_task_minimum_trigger_interval_in_seconds = 60 trace_level = always as select 1"),
+        "CREATE TASK resilient\n    \
+           WAREHOUSE = w\n    \
+           TASK_AUTO_RETRY_ATTEMPTS = 3\n    \
+           USER_TASK_MINIMUM_TRIGGER_INTERVAL_IN_SECONDS = 60\n    \
+           TRACE_LEVEL = always\n    \
+           AS\n    \
+           SELECT 1;\n",
+    );
+}
+
+#[test]
 fn create_task_lays_out_body_structurally() {
     assert_eq!(
         fmt("create task t warehouse = w schedule = '5 minutes' as select 1"),
@@ -221,6 +239,23 @@ fn create_dynamic_table_keeps_query_structural() {
            AS\n    \
            SELECT a\n    \
            FROM t;\n",
+    );
+}
+
+#[test]
+fn create_semantic_view_stacks_model_clauses() {
+    assert_eq!(
+        fmt("create semantic view sv tables(orders as mart.orders primary key(order_id), customers as mart.customers primary key(customer_id)) metrics(public orders.revenue as sum(orders.net_amount)) ai_sql_generation 'Use revenue.' copy grants"),
+        "CREATE SEMANTIC VIEW sv\n    \
+           TABLES (\n        \
+           orders AS mart.orders PRIMARY KEY (order_id),\n        \
+           customers AS mart.customers PRIMARY KEY (customer_id)\n    \
+           )\n    \
+           METRICS (\n        \
+           PUBLIC orders.revenue AS sum(orders.net_amount)\n    \
+           )\n    \
+           AI_SQL_GENERATION 'Use revenue.'\n    \
+           COPY GRANTS;\n",
     );
 }
 

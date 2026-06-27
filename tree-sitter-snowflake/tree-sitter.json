@@ -14,7 +14,8 @@
       "class-name": "TreeSitterSnowflake",
       "highlights": "queries/highlights.scm",
       "locals": "queries/locals.scm",
-      "injections": "queries/injections.scm"
+      "injections": "queries/injections.scm",
+      "indents": "queries/indents.scm"
     }
   ],
   "metadata": {

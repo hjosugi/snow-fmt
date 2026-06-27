@@ -379,7 +379,8 @@ fn at_object_kind(p: &Parser) -> bool {
 }
 
 /// At a Phase-7 "named object" kind — the property-region creates this rule structures
-/// (`SCHEMA`/`DATABASE`/`WAREHOUSE`/`STAGE`/`SEQUENCE`/`STREAM`/`TASK`/`DYNAMIC TABLE`/`FILE FORMAT`).
+/// (`SCHEMA`/`DATABASE`/`WAREHOUSE`/`STAGE`/`SEQUENCE`/`STREAM`/`TASK`/`DYNAMIC TABLE`/
+/// `SEMANTIC VIEW`/`FILE FORMAT`).
 fn at_named_object_kind(p: &Parser) -> bool {
     p.at(TASK_KW)
         || p.at(WAREHOUSE_KW)
@@ -389,6 +390,7 @@ fn at_named_object_kind(p: &Parser) -> bool {
         || p.nth_contextual(0, ContextualKeyword::Sequence)
         || p.nth_contextual(0, ContextualKeyword::Stream)
         || p.nth_contextual(0, ContextualKeyword::Dynamic)
+        || p.nth_contextual(0, ContextualKeyword::Semantic)
         || p.nth_contextual(0, ContextualKeyword::File)
         || p.nth_contextual(0, ContextualKeyword::Tag)
 }
@@ -445,6 +447,11 @@ fn object_kind_words(p: &mut Parser) {
         if p.at(TABLE_KW) {
             p.bump(TABLE_KW);
         }
+    } else if p.nth_contextual(0, ContextualKeyword::Semantic) {
+        p.bump_as(CONTEXTUAL_KEYWORD); // SEMANTIC
+        if p.at(VIEW_KW) {
+            p.bump(VIEW_KW);
+        }
     } else if p.nth_contextual(0, ContextualKeyword::Tag) {
         p.bump_as(CONTEXTUAL_KEYWORD);
     } else if p.at_keyword() {
@@ -496,7 +503,9 @@ fn policy_kind_words(p: &mut Parser) {
 /// the current token into an [`OBJECT_PROPERTY`] so a surprise token can never stall the loop.
 fn object_property_region(p: &mut Parser) {
     while !at_create_body(p) && !p.at(SEMICOLON) && !p.at_eof() {
-        if p.at(ON_KW) {
+        if at_semantic_view_clause_start(p) {
+            semantic_view_clause(p);
+        } else if p.at(ON_KW) {
             stream_source(p);
         } else if p.at(AFTER_KW) {
             task_after(p);
@@ -510,6 +519,118 @@ fn object_property_region(p: &mut Parser) {
             object_property(p);
         }
     }
+}
+
+/// A top-level `CREATE SEMANTIC VIEW` clause. The Snowflake surface is wide and evolving:
+/// `TABLES (...)`, `RELATIONSHIPS (...)`, `FACTS (...)`, `DIMENSIONS (...)`, `METRICS (...)`,
+/// AI instruction clauses, `WITH TAG (...)`, and `COPY GRANTS`. We structure the top-level clause
+/// and the outer comma-separated list items while keeping each item body lossless.
+fn semantic_view_clause(p: &mut Parser) {
+    let m = p.start();
+    if p.at(WITH_KW) {
+        p.bump(WITH_KW);
+        if p.nth_contextual(0, ContextualKeyword::Tag) {
+            p.bump_as(CONTEXTUAL_KEYWORD);
+        }
+        if p.at(L_PAREN) {
+            semantic_view_paren_list(p);
+        }
+    } else if p.at(COPY_KW) {
+        p.bump(COPY_KW);
+        p.eat(GRANTS_KW);
+    } else {
+        semantic_view_word(p);
+        if p.at(L_PAREN) {
+            semantic_view_paren_list(p);
+        } else if !at_semantic_view_clause_start(p)
+            && !p.at(SEMICOLON)
+            && !p.at_eof()
+            && !at_create_body(p)
+        {
+            // `AI_SQL_GENERATION '<instruction>'` and
+            // `AI_QUESTION_CATEGORIZATION '<instruction>'` carry a single literal value.
+            semantic_view_word(p);
+        }
+    }
+    m.complete(p, SEMANTIC_VIEW_CLAUSE);
+}
+
+fn at_semantic_view_clause_start(p: &Parser) -> bool {
+    p.nth_contextual(0, ContextualKeyword::Tables)
+        || p.nth_contextual(0, ContextualKeyword::Relationships)
+        || p.nth_contextual(0, ContextualKeyword::Facts)
+        || p.nth_contextual(0, ContextualKeyword::Dimensions)
+        || p.nth_contextual(0, ContextualKeyword::Metrics)
+        || p.nth_contextual(0, ContextualKeyword::AiSqlGeneration)
+        || p.nth_contextual(0, ContextualKeyword::AiQuestionCategorization)
+        || p.nth_contextual(0, ContextualKeyword::AiVerifiedQueries)
+        || (p.at(WITH_KW) && p.nth_contextual(1, ContextualKeyword::Tag))
+        || (p.at(COPY_KW) && p.nth_at(1, GRANTS_KW))
+}
+
+fn semantic_view_paren_list(p: &mut Parser) {
+    p.bump(L_PAREN);
+    if !p.at(R_PAREN) {
+        semantic_view_item(p);
+        while p.eat(COMMA) {
+            if p.at(R_PAREN) {
+                break;
+            }
+            semantic_view_item(p);
+        }
+    }
+    p.expect(R_PAREN);
+}
+
+fn semantic_view_item(p: &mut Parser) {
+    let m = p.start();
+    let mut depth = 0u32;
+    while !p.at_eof() {
+        if depth == 0 && (p.at(COMMA) || p.at(R_PAREN)) {
+            break;
+        }
+        if p.at(L_PAREN) {
+            depth += 1;
+            p.bump(L_PAREN);
+        } else if p.at(R_PAREN) {
+            depth -= 1;
+            p.bump(R_PAREN);
+        } else {
+            semantic_view_word(p);
+        }
+    }
+    m.complete(p, SEMANTIC_VIEW_ITEM);
+}
+
+fn semantic_view_word(p: &mut Parser) {
+    if is_semantic_view_contextual_word(p) {
+        p.bump_as(CONTEXTUAL_KEYWORD);
+    } else {
+        p.bump_any();
+    }
+}
+
+fn is_semantic_view_contextual_word(p: &Parser) -> bool {
+    p.nth_contextual(0, ContextualKeyword::Tables)
+        || p.nth_contextual(0, ContextualKeyword::Relationships)
+        || p.nth_contextual(0, ContextualKeyword::Facts)
+        || p.nth_contextual(0, ContextualKeyword::Dimensions)
+        || p.nth_contextual(0, ContextualKeyword::Metrics)
+        || p.nth_contextual(0, ContextualKeyword::Public)
+        || p.nth_contextual(0, ContextualKeyword::Private)
+        || p.nth_contextual(0, ContextualKeyword::Primary)
+        || p.nth_contextual(0, ContextualKeyword::Key)
+        || p.nth_contextual(0, ContextualKeyword::References)
+        || p.nth_contextual(0, ContextualKeyword::Synonyms)
+        || p.nth_contextual(0, ContextualKeyword::Labels)
+        || p.nth_contextual(0, ContextualKeyword::AiSqlGeneration)
+        || p.nth_contextual(0, ContextualKeyword::AiQuestionCategorization)
+        || p.nth_contextual(0, ContextualKeyword::AiVerifiedQueries)
+        || p.nth_contextual(0, ContextualKeyword::Question)
+        || p.nth_contextual(0, ContextualKeyword::VerifiedAt)
+        || p.nth_contextual(0, ContextualKeyword::OnboardingQuestion)
+        || p.nth_contextual(0, ContextualKeyword::VerifiedBy)
+        || p.nth_contextual(0, ContextualKeyword::Tag)
 }
 
 /// One object property: `KEY = value`, `KEY = ( … )`, the unset/no-prefixed flags (`NOORDER`), or a
@@ -1201,7 +1322,7 @@ fn alter_stmt(p: &mut Parser) {
 fn lenient_stmt(p: &mut Parser, node: SyntaxKind) {
     let m = p.start();
     p.bump_any(); // the leading statement keyword
-    while !p.at(SEMICOLON) && !p.at_eof() {
+    while !p.at(FLOW_PIPE) && !p.at(SEMICOLON) && !p.at_eof() {
         p.bump_any();
     }
     m.complete(p, node);

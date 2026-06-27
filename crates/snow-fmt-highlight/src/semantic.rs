@@ -32,6 +32,8 @@ pub enum SemanticTokenType {
     Comment,
     /// Stage references (`@stage`, `@~`, `@%table`) — `namespace` is the closest standard type.
     Namespace,
+    /// Built-in function names, currently used for Snowflake Cortex / AISQL functions.
+    Function,
 }
 
 impl SemanticTokenType {
@@ -47,6 +49,7 @@ impl SemanticTokenType {
         SemanticTokenType::Operator,
         SemanticTokenType::Comment,
         SemanticTokenType::Namespace,
+        SemanticTokenType::Function,
     ];
 
     /// The canonical LSP `SemanticTokenType` string (matches `lsp_types::SemanticTokenType`).
@@ -61,6 +64,7 @@ impl SemanticTokenType {
             SemanticTokenType::Operator => "operator",
             SemanticTokenType::Comment => "comment",
             SemanticTokenType::Namespace => "namespace",
+            SemanticTokenType::Function => "function",
         }
     }
 
@@ -76,6 +80,7 @@ impl SemanticTokenType {
             SemanticTokenType::Operator => 6,
             SemanticTokenType::Comment => 7,
             SemanticTokenType::Namespace => 8,
+            SemanticTokenType::Function => 9,
         }
     }
 }
@@ -310,18 +315,82 @@ pub fn detect_injections(input: &str) -> Vec<Injection> {
 /// but they are returned alongside by [`semantic_tokens`] so an editor can layer an embedded
 /// grammar over the body's range.
 pub fn resolve_tokens(input: &str) -> Vec<ResolvedToken> {
-    highlight(input)
+    let highlighted = highlight(input);
+    highlighted
         .tokens
-        .into_iter()
-        .filter_map(|token: HighlightToken| {
+        .iter()
+        .enumerate()
+        .filter_map(|(index, token)| {
+            if is_cortex_or_aisql_function_token(&highlighted.tokens, index) {
+                return Some(ResolvedToken {
+                    range: token.range.clone(),
+                    token_type: SemanticTokenType::Function,
+                    modifiers: SemanticTokenModifiers::DEFAULT_LIBRARY,
+                });
+            }
             let (token_type, modifiers) = semantic_token(token.kind)?;
             Some(ResolvedToken {
-                range: token.range,
+                range: token.range.clone(),
                 token_type,
                 modifiers,
             })
         })
         .collect()
+}
+
+fn is_cortex_or_aisql_function_token(tokens: &[HighlightToken<'_>], index: usize) -> bool {
+    let token = &tokens[index];
+    if !matches!(token.kind, HighlightKind::Identifier | HighlightKind::Keyword) {
+        return false;
+    }
+    if next_significant(tokens, index).is_none_or(|next| tokens[next].text != "(") {
+        return false;
+    }
+    token.text.to_ascii_uppercase().starts_with("AI_")
+        || is_snowflake_cortex_qualified_leaf(tokens, index)
+}
+
+fn is_snowflake_cortex_qualified_leaf(tokens: &[HighlightToken<'_>], index: usize) -> bool {
+    let Some(dot_before_fn) = prev_significant(tokens, index) else {
+        return false;
+    };
+    if tokens[dot_before_fn].text != "." {
+        return false;
+    }
+    let Some(cortex) = prev_significant(tokens, dot_before_fn) else {
+        return false;
+    };
+    if !tokens[cortex].text.eq_ignore_ascii_case("cortex") {
+        return false;
+    }
+    let Some(dot_before_cortex) = prev_significant(tokens, cortex) else {
+        return false;
+    };
+    if tokens[dot_before_cortex].text != "." {
+        return false;
+    }
+    let Some(snowflake) = prev_significant(tokens, dot_before_cortex) else {
+        return false;
+    };
+    tokens[snowflake].text.eq_ignore_ascii_case("snowflake")
+}
+
+fn prev_significant(tokens: &[HighlightToken<'_>], index: usize) -> Option<usize> {
+    tokens[..index]
+        .iter()
+        .enumerate()
+        .rev()
+        .find(|(_, token)| !matches!(token.kind, HighlightKind::Whitespace | HighlightKind::Comment))
+        .map(|(index, _)| index)
+}
+
+fn next_significant(tokens: &[HighlightToken<'_>], index: usize) -> Option<usize> {
+    tokens
+        .iter()
+        .enumerate()
+        .skip(index + 1)
+        .find(|(_, token)| !matches!(token.kind, HighlightKind::Whitespace | HighlightKind::Comment))
+        .map(|(index, _)| index)
 }
 
 /// The full semantic-token result: the per-token tagging plus the embedded-language regions.

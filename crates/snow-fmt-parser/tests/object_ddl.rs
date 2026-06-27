@@ -101,6 +101,16 @@ fn create_dynamic_table_keeps_query_body_structural() {
 }
 
 #[test]
+fn create_semantic_view_parses_clauses_and_items() {
+    let sql = "CREATE OR REPLACE SEMANTIC VIEW sv TABLES(orders AS mart.orders PRIMARY KEY(order_id)) RELATIONSHIPS(order_customer AS orders(customer_id) REFERENCES customers) FACTS(PUBLIC orders.net_amount AS net_amount) DIMENSIONS(PUBLIC orders.order_date AS order_date) METRICS(PUBLIC orders.revenue AS SUM(orders.net_amount)) COMMENT = 'semantic model' AI_SQL_GENERATION 'Use revenue for sales questions.' AI_QUESTION_CATEGORIZATION 'Classify revenue questions.' AI_VERIFIED_QUERIES(top_revenue AS(QUESTION 'Top revenue?' VERIFIED_AT 1767225600 ONBOARDING_QUESTION TRUE VERIFIED_BY 'analyst@example.com' SQL 'SELECT 1')) WITH TAG(governance.owner = 'analytics') COPY GRANTS";
+    clean(sql);
+    assert_has_node_kind(sql, SyntaxKind::CREATE_STMT);
+    assert_has_node_kind(sql, SyntaxKind::SEMANTIC_VIEW_CLAUSE);
+    assert_has_node_kind(sql, SyntaxKind::SEMANTIC_VIEW_ITEM);
+    assert_has_node_kind(sql, SyntaxKind::OBJECT_PROPERTY);
+}
+
+#[test]
 fn create_policy_and_tag_shapes_parse_clean() {
     for sql in [
         "CREATE MASKING POLICY mask_email AS (val STRING) RETURNS STRING -> CASE WHEN CURRENT_ROLE() IN ('ANALYST') THEN val ELSE '***' END",

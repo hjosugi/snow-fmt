@@ -493,6 +493,44 @@ fn documented_javascript_procedure_api_body_is_formatted() {
 }
 
 #[test]
+fn single_quoted_routine_bodies_are_formatted_when_safe() {
+    let js = "create function f() returns string language javascript as ' return ''x''; '";
+    let js_out = fmt(js);
+    assert_eq!(
+        js_out,
+        "CREATE FUNCTION f () RETURNS string LANGUAGE JAVASCRIPT AS '\nreturn \"x\";\n';\n"
+    );
+    assert_eq!(fmt(&js_out), js_out);
+
+    let py = "create function py_f() returns string language python as 'def f():\n    return ''ok'''";
+    let py_out = fmt(py);
+    assert_eq!(
+        py_out,
+        "CREATE FUNCTION py_f () RETURNS string LANGUAGE PYTHON AS '\ndef f():\n    return \"ok\"\n';\n"
+    );
+    assert_eq!(fmt(&py_out), py_out);
+
+    let sql = "create procedure p() returns string language sql as 'begin return ''ok''; end'";
+    let sql_out = fmt(sql);
+    assert_eq!(
+        sql_out,
+        "CREATE PROCEDURE p () RETURNS string LANGUAGE SQL AS '\nBEGIN\n    RETURN ''ok'';\nEND;\n';\n"
+    );
+    assert_eq!(fmt(&sql_out), sql_out);
+}
+
+#[test]
+fn sql_expression_quoted_body_stays_verbatim() {
+    let src = "create function add1(n float) returns float language sql as 'n + 1'";
+    let out = fmt(src);
+    assert_eq!(
+        out,
+        "CREATE FUNCTION add1 (n float) RETURNS float LANGUAGE SQL AS 'n + 1';\n"
+    );
+    assert_eq!(fmt(&out), out);
+}
+
+#[test]
 fn invalid_javascript_routine_body_stays_verbatim() {
     let src = "create function f() returns string language javascript as $$ if ( $$";
     let out = fmt(src);
@@ -534,6 +572,25 @@ fn python_java_and_scala_routine_bodies_are_formatted_when_supported() {
     assert_eq!(
         scala_out,
         "CREATE PROCEDURE scala_p () RETURNS string LANGUAGE SCALA RUNTIME_VERSION = '2.12' PACKAGES = ('com.snowflake:snowpark:latest') HANDLER = 'Main.run' AS $$\nclass Main {\n    def run(session: com.snowflake.snowpark.Session): String = \"ok\"\n}\n$$;\n"
+    );
+    assert_eq!(fmt(&scala_out), scala_out);
+}
+
+#[test]
+fn java_and_scala_text_blocks_do_not_break_brace_formatting() {
+    let java = "create function j() returns string language java as $$ class C { public static String run() { String sql = \"\"\"select { not_a_block }\"\"\"; return sql; } } $$";
+    let java_out = fmt(java);
+    assert_eq!(
+        java_out,
+        "CREATE FUNCTION j () RETURNS string LANGUAGE JAVA AS $$\nclass C {\n    public static String run() {\n        String sql = \"\"\"select { not_a_block }\"\"\";\n        return sql;\n    }\n}\n$$;\n"
+    );
+    assert_eq!(fmt(&java_out), java_out);
+
+    let scala = "create function s() returns string language scala as $$ class C { def run(): String = { val q = \"\"\"select } as text\"\"\"; q } } $$";
+    let scala_out = fmt(scala);
+    assert_eq!(
+        scala_out,
+        "CREATE FUNCTION s () RETURNS string LANGUAGE SCALA AS $$\nclass C {\n    def run(): String = {\n        val q = \"\"\"select } as text\"\"\";\n        q\n    }\n}\n$$;\n"
     );
     assert_eq!(fmt(&scala_out), scala_out);
 }
@@ -717,6 +774,14 @@ fn flow_operator_chains_statements_one_step_per_line() {
     ->> SELECT count(*)
     FROM $1;
     "
+    );
+}
+
+#[test]
+fn flow_operator_allows_show_statement_chains() {
+    assert_eq!(
+        fmt("show tables in schema db.s ->> select \"name\" from $1 where \"kind\" = 'TABLE'"),
+        "SHOW tables IN schema db.s\n->> SELECT \"name\"\nFROM $1\nWHERE \"kind\" = 'TABLE';\n"
     );
 }
 

@@ -28,7 +28,17 @@ lexer/highlighter by tests in `snow-fmt-highlight` (`tests/textmate.rs`): every 
 grammar scopes as a keyword or type must be classified the same way by
 `snow_fmt_highlight::classify`, so the grammar can't drift from the rest of the toolchain.
 
-### Using it in VS Code
+### VS Code extension package
+
+The `editors/` directory is also a minimal VS Code extension root. Package it from this
+directory with `vsce package` (or install it locally with VS Code's "Install from VSIX") to
+contribute:
+
+- language id: `snowflake-sql`
+- grammar scope: `source.snowflake-sql`
+- file extensions: `.sql`, `.snowsql`, `.sfsql`
+
+### Embedding the grammar manually
 
 ```json
 {

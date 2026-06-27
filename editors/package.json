@@ -1,0 +1,48 @@
+{
+  "name": "snowflake-sql-snow-fmt",
+  "displayName": "Snowflake SQL (snow-fmt)",
+  "description": "Snowflake SQL language support backed by snow-fmt's TextMate grammar.",
+  "version": "0.1.0",
+  "publisher": "snow-fmt",
+  "license": "MIT OR Apache-2.0",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/hjosugi/snow-fmt.git",
+    "directory": "editors"
+  },
+  "engines": {
+    "vscode": "^1.90.0"
+  },
+  "categories": [
+    "Programming Languages"
+  ],
+  "keywords": [
+    "snowflake",
+    "sql",
+    "snow-fmt"
+  ],
+  "contributes": {
+    "languages": [
+      {
+        "id": "snowflake-sql",
+        "aliases": [
+          "Snowflake SQL",
+          "Snowflake"
+        ],
+        "extensions": [
+          ".sql",
+          ".snowsql",
+          ".sfsql"
+        ],
+        "configuration": "./language-configuration.json"
+      }
+    ],
+    "grammars": [
+      {
+        "language": "snowflake-sql",
+        "scopeName": "source.snowflake-sql",
+        "path": "./snowflake.tmLanguage.json"
+      }
+    ]
+  }
+}

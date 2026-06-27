@@ -91,6 +91,8 @@ pub(crate) enum ContextualKeyword {
     Stream,
     /// `CREATE DYNAMIC TABLE …`.
     Dynamic,
+    /// `CREATE SEMANTIC VIEW …`.
+    Semantic,
     /// `CREATE FILE FORMAT …`.
     File,
     /// `CREATE FILE FORMAT …` — second word.
@@ -109,6 +111,24 @@ pub(crate) enum ContextualKeyword {
     Propagate,
     /// `CREATE MASKING POLICY … EXEMPT_OTHER_POLICIES = ...`.
     ExemptOtherPolicies,
+    // ---- Semantic View vocabulary (Snowflake semantic model DDL). These are contextual because
+    // they remain ordinary identifiers outside `CREATE SEMANTIC VIEW`.
+    Tables,
+    Relationships,
+    Facts,
+    Dimensions,
+    Metrics,
+    Public,
+    Private,
+    Synonyms,
+    Labels,
+    AiSqlGeneration,
+    AiQuestionCategorization,
+    AiVerifiedQueries,
+    Question,
+    VerifiedAt,
+    OnboardingQuestion,
+    VerifiedBy,
     // ---- Phase 7 GRANT / REVOKE vocabulary ----
     /// `… TO ROLE r` / `… FROM ROLE r`.
     Role,
@@ -191,6 +211,7 @@ impl ContextualKeyword {
             ContextualKeyword::Sequence => "sequence",
             ContextualKeyword::Stream => "stream",
             ContextualKeyword::Dynamic => "dynamic",
+            ContextualKeyword::Semantic => "semantic",
             ContextualKeyword::File => "file",
             ContextualKeyword::Format => "format",
             ContextualKeyword::Masking => "masking",
@@ -200,6 +221,22 @@ impl ContextualKeyword {
             ContextualKeyword::AllowedValues => "allowed_values",
             ContextualKeyword::Propagate => "propagate",
             ContextualKeyword::ExemptOtherPolicies => "exempt_other_policies",
+            ContextualKeyword::Tables => "tables",
+            ContextualKeyword::Relationships => "relationships",
+            ContextualKeyword::Facts => "facts",
+            ContextualKeyword::Dimensions => "dimensions",
+            ContextualKeyword::Metrics => "metrics",
+            ContextualKeyword::Public => "public",
+            ContextualKeyword::Private => "private",
+            ContextualKeyword::Synonyms => "synonyms",
+            ContextualKeyword::Labels => "labels",
+            ContextualKeyword::AiSqlGeneration => "ai_sql_generation",
+            ContextualKeyword::AiQuestionCategorization => "ai_question_categorization",
+            ContextualKeyword::AiVerifiedQueries => "ai_verified_queries",
+            ContextualKeyword::Question => "question",
+            ContextualKeyword::VerifiedAt => "verified_at",
+            ContextualKeyword::OnboardingQuestion => "onboarding_question",
+            ContextualKeyword::VerifiedBy => "verified_by",
             ContextualKeyword::Role => "role",
             ContextualKeyword::User => "user",
             ContextualKeyword::Share => "share",
