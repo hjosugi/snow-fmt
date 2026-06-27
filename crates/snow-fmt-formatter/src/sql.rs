@@ -534,6 +534,7 @@ impl Lowerer {
     fn lower_create_routine(&mut self, node: &SyntaxNode) -> Doc {
         let body_language = routine_body_language(node).unwrap_or(RoutineBodyLanguage::Sql);
         let mut parts = Vec::new();
+        let mut prev_sig = None;
         for child in node.children_with_tokens() {
             if let Some(token) = child.as_token() {
                 if token.kind().is_trivia() {
@@ -556,16 +557,22 @@ impl Lowerer {
                         RoutineBodyLanguage::Other => None,
                     } {
                         parts.push(self.token_rendered(token, text(formatted)));
+                        prev_sig = Some(token.kind());
                         continue;
                     }
                 }
-                parts.push(self.token(token));
+                if token.kind() == L_PAREN && prev_sig == Some(TABLE_KW) {
+                    parts.push(space());
+                }
+                parts.push(self.token_cased(token, is_routine_header_word(token)));
+                prev_sig = Some(token.kind());
             } else if let Some(node) = child.as_node() {
                 if node.kind() == BLOCK_STMT {
                     parts.push(hard_line());
                     self.reset();
                 }
                 parts.push(self.lower_node(node));
+                prev_sig = None;
             }
         }
         concat(parts)
@@ -1483,6 +1490,38 @@ fn routine_body_language(node: &SyntaxNode) -> Option<RoutineBodyLanguage> {
     }
     None
 }
+
+fn is_routine_header_word(token: &SyntaxToken) -> bool {
+    if !matches!(token.kind(), IDENT | CONTEXTUAL_KEYWORD) {
+        return false;
+    }
+    ROUTINE_HEADER_WORDS
+        .binary_search(&token.text().to_ascii_lowercase().as_str())
+        .is_ok()
+}
+
+const ROUTINE_HEADER_WORDS: &[&str] = &[
+    "artifact_repository",
+    "called",
+    "caller",
+    "copy",
+    "external_access_integrations",
+    "handler",
+    "immutable",
+    "imports",
+    "input",
+    "memoizable",
+    "null",
+    "owner",
+    "packages",
+    "restricted",
+    "runtime_version",
+    "secrets",
+    "strict",
+    "target_path",
+    "user",
+    "volatile",
+];
 
 fn format_embedded_javascript_dollar_body(text: &str, ctx: Ctx) -> Option<String> {
     let body = text.strip_prefix("$$")?.strip_suffix("$$")?;

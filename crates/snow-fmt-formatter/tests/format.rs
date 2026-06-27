@@ -482,6 +482,17 @@ fn javascript_routine_body_preserves_template_literal_indentation() {
 }
 
 #[test]
+fn documented_javascript_procedure_api_body_is_formatted() {
+    let src = "create procedure stproc1() returns string not null language javascript as -- \"$$\" is delimiter\n$$ var statement = snowflake.createStatement({sqlText: \"select 1\"}); return statement.execute().next(); $$";
+    let out = fmt(src);
+    assert_eq!(
+        out,
+        "CREATE PROCEDURE stproc1 () RETURNS string NOT NULL LANGUAGE JAVASCRIPT AS -- \"$$\" is delimiter\n$$\nvar statement = snowflake.createStatement({ sqlText: \"select 1\" });\nreturn statement.execute().next();\n$$;\n"
+    );
+    assert_eq!(fmt(&out), out);
+}
+
+#[test]
 fn invalid_javascript_routine_body_stays_verbatim() {
     let src = "create function f() returns string language javascript as $$ if ( $$";
     let out = fmt(src);
@@ -509,6 +520,14 @@ fn python_java_and_scala_routine_bodies_are_formatted_when_supported() {
         "CREATE FUNCTION java_f (\n    x int\n) RETURNS int LANGUAGE JAVA HANDLER = 'C.run' AS $$\nclass C {\n    public static int run(int x) {\n        return x + 1;\n    }\n}\n$$;\n"
     );
     assert_eq!(fmt(&java_out), java_out);
+
+    let java_table = "create or replace procedure java_tabular() returns table(id number, name string) language java runtime_version = '17' packages = ('com.snowflake:snowpark:latest') handler = 'Proc.run' target_path = '@stage/proc.jar' as $$ class Proc { public static com.snowflake.snowpark_java.DataFrame run(com.snowflake.snowpark_java.Session session) { return session.table(\"T\"); } } $$";
+    let java_table_out = fmt(java_table);
+    assert_eq!(
+        java_table_out,
+        "CREATE OR REPLACE PROCEDURE java_tabular () RETURNS TABLE (id number, name string) LANGUAGE JAVA RUNTIME_VERSION = '17' PACKAGES = ('com.snowflake:snowpark:latest') HANDLER = 'Proc.run' TARGET_PATH = '@stage/proc.jar' AS $$\nclass Proc {\n    public static com.snowflake.snowpark_java.DataFrame run(com.snowflake.snowpark_java.Session session) {\n        return session.table(\"T\");\n    }\n}\n$$;\n"
+    );
+    assert_eq!(fmt(&java_table_out), java_table_out);
 
     let scala = "create procedure scala_p() returns string language scala RUNTIME_VERSION = '2.12' PACKAGES = ('com.snowflake:snowpark:latest') HANDLER = 'Main.run' as $$\nclass Main { def run(session: com.snowflake.snowpark.Session): String = \"ok\" }\n$$";
     let scala_out = fmt(scala);

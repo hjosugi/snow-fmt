@@ -87,9 +87,11 @@ fn scripting_blocks_parse_into_structured_nodes() {
 }
 
 #[test]
-fn routine_bodies_cover_python_scala_and_unquoted_scripting() {
+fn routine_bodies_cover_all_supported_languages_and_unquoted_scripting() {
     for sql in [
+        "CREATE PROCEDURE js_p() RETURNS STRING NOT NULL LANGUAGE JAVASCRIPT AS -- delimiter comment\n$$ var statement = snowflake.createStatement({sqlText: \"select 1\"}); return statement.execute().next(); $$",
         "CREATE PROCEDURE py_p() RETURNS STRING LANGUAGE PYTHON RUNTIME_VERSION = '3.12' PACKAGES = ('snowflake-snowpark-python') HANDLER = 'main' AS $$\ndef main(session):\n    return 'ok'\n$$",
+        "CREATE PROCEDURE java_tabular() RETURNS TABLE(id NUMBER, name STRING) LANGUAGE JAVA RUNTIME_VERSION = '17' PACKAGES = ('com.snowflake:snowpark:latest') HANDLER = 'Proc.run' TARGET_PATH = '@stage/proc.jar' AS $$ class Proc {} $$",
         "CREATE PROCEDURE scala_p() RETURNS STRING LANGUAGE SCALA RUNTIME_VERSION = '2.12' PACKAGES = ('com.snowflake:snowpark:latest') HANDLER = 'Main.run' AS $$\nclass Main { def run(session: com.snowflake.snowpark.Session): String = \"ok\" }\n$$",
         "CREATE PROCEDURE sql_p() RETURNS STRING LANGUAGE SQL AS BEGIN RETURN 'ok'; END",
         "CREATE PROCEDURE sql_decl_p() RETURNS NUMBER LANGUAGE SQL AS DECLARE x NUMBER DEFAULT 1; BEGIN RETURN x; END",

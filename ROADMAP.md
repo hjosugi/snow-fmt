@@ -101,7 +101,7 @@
 - ⏳ Semantic View、細かい object option のさらなる構造化（🔎 新しめは要ドキュメント確認）
 
 ## Phase 8 — 手続き・関数・埋め込み言語 🚧 ＜第2の差別化点＞
-- 🚧 `CREATE PROCEDURE`/`FUNCTION`（**骨格 + SQL/JS/Python/Java/Scala ボディ整形**: シグネチャ・`RETURNS`・`LANGUAGE`・各種オプションを寛容にトークン保持。`LANGUAGE SQL AS $$ … $$` は内部 SQL/Scripting を同じ formatter で再帰整形、`LANGUAGE JAVASCRIPT` は Biome (`biome_js_formatter`)、`LANGUAGE PYTHON` は Ruff (`ruff_python_formatter`)、Java/Scala は brace-aware lightweight formatter に委譲。解析不能時は安全に元 token を保持。quoted body は現状 **verbatim**。ヘッダは構造的整形・引数は1つ1行）… [grammar.rs](crates/snow-fmt-parser/src/grammar.rs) `create_routine` / [sql.rs](crates/snow-fmt-formatter/src/sql.rs) `lower_create_routine`。残: UDTF の `TABLE(...)` 戻り、quoted body の扱い
+- 🚧 `CREATE PROCEDURE`/`FUNCTION`（**骨格 + SQL/JS/Python/Java/Scala ボディ整形**: シグネチャ・`RETURNS`・`LANGUAGE`・各種オプションを寛容にトークン保持。`RETURNS TABLE (...)`、`RETURNS ... NOT NULL`、Java/JavaScript stored procedure docs/API 例を回帰テスト化。`LANGUAGE SQL AS $$ … $$` は内部 SQL/Scripting を同じ formatter で再帰整形、`LANGUAGE JAVASCRIPT` は Biome (`biome_js_formatter`)、`LANGUAGE PYTHON` は Ruff (`ruff_python_formatter`)、Java/Scala は brace-aware lightweight formatter に委譲。解析不能時は安全に元 token を保持。quoted body は現状 **verbatim**。ヘッダは構造的整形・引数は1つ1行）… [grammar.rs](crates/snow-fmt-parser/src/grammar.rs) `create_routine` / [sql.rs](crates/snow-fmt-formatter/src/sql.rs) `lower_create_routine`。残: quoted body の扱い、Java/Scala formatter の限界ケース拡張
 - ✅ セッション `SET <var> = <expr>` / `SET (a, b) = (...)`、`EXECUTE IMMEDIATE <string|$$…$$|:var> [USING (...)]`（`SET_STMT`/`EXECUTE_STMT` ノード、新キーワード `IMMEDIATE`。式に `DOLLAR_STRING` を許可）。**コーパス clean 20→22件** … [grammar.rs](crates/snow-fmt-parser/src/grammar.rs) `set_stmt`/`execute_stmt`
 - ✅ `CALL proc(args)`（プロシージャ呼び出し。`CALL_STMT` ノード、呼び出しは通常の call 式として整形＝引数オーバーフロー時は1引数1行、`INTO :var` 等の末尾は寛容保持）。fixture `case_033` … [grammar.rs](crates/snow-fmt-parser/src/grammar.rs) `call_stmt`
 - ✅ トランザクション制御 `BEGIN`/`COMMIT`/`ROLLBACK`（`BEGIN TRANSACTION`/`BEGIN WORK`/`BEGIN;`、`COMMIT WORK`、`ROLLBACK TO SAVEPOINT …` 含む。`TRANSACTION_STMT`）。**バグ修正**: `COMMIT WORK`/`ROLLBACK TO SAVEPOINT …` の複数文分割を解消。fixture `case_036`/`case_037`。`BEGIN` はコンテキストキーワード `transaction`/`work` か直後 `;` でのみトランザクションと判定し、Scripting ブロック `BEGIN … END`（内部 `;` 区切り）は誤分割せず verbatim 維持 … [grammar.rs](crates/snow-fmt-parser/src/grammar.rs) `at_begin_transaction`
@@ -137,7 +137,7 @@
 **Phase 0–6 は完了**、Phase 7 は主要 DDL/object DDL/access control まで実用域、Phase 9 は LSP/diagnostics/editor grammar 基盤まで、Phase 8/10 が部分。コア整形（SELECT 一式・DML・基本 DDL・object DDL・COPY・Snowflake 固有クエリ）は無破壊・べき等を property test まで含めて機械保証しつつ実用段階。CLI `snow-fmt` v0.1.0 公開可。
 
 **残りの主な未着手（価値順）**:
-1. **Phase 8 埋め込み言語**: quoted body の扱い、UDTF の `RETURNS TABLE(...)` 周辺、Java/Scala formatter の限界ケース拡張。`$$…$$` は SQL/JS/Python/Java/Scala まで対応済みで、失敗時は verbatim 保持。
+1. **Phase 8 埋め込み言語**: quoted body の扱い、Java/Scala formatter の限界ケース拡張。`$$…$$` は SQL/JS/Python/Java/Scala まで対応済みで、失敗時は verbatim 保持。
 2. **Phase 7 DDL の残り**: Semantic View、細かい object option のさらなる構造化（🔎 新しめは要ドキュメント確認）。
 3. **Phase 5/9 の網羅強化**: `->>` の `SHOW` chain など追加ゴールデン、Tree-sitter indents。
 4. **Phase 10**: `rayon` 並列、Cortex/AISQL 関数認識、VS Code 拡張、外部大規模コーパス。
