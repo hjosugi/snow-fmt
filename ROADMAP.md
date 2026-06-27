@@ -18,6 +18,7 @@
 - **埋め込み言語**: SQL 本体の Doc エンジンとは独立に、delimiter-aware body token（現行 Snowflake は `$$…$$`）の本体のみ言語別サブフォーマッタで整形。SQL は自己再帰、JavaScript は `biome_js_formatter`、Python は `ruff_python_formatter`、Java/Scala は brace-aware lightweight formatter で処理し、解析不能時は verbatim フォールバック。
 - **テスト**: `insta` スナップショット ＋ **stability-check（べき等）** ＋ ロスレス往復 ＋ 実コーパスでの**類似度スコア**ゲート ＋ ファズ。フィクスチャは sqlparser-rs の Snowflake テスト（Apache-2.0）を流用。
 - **スタイル**: gofmt / zig fmt に倣い **opinionated・ほぼ設定なし**（`line-length`、必要なら `keyword-case` 程度）。
+- **仕様追随**: `uroborosql-fmt` / `postgresql-cst-parser` の Pure Rust CST 移行に倣い、公式構文や公式サンプルから parser coverage を機械生成・照合するレーンを持つ。Snowflake には PostgreSQL の `gram.y` 相当が公開されていないため、当面は公式 docs/examples miner → fixture/keyword delta/statement skeleton/parser-gap report を生成し、手書き parser を安全に補強する。
 
 ---
 
@@ -132,6 +133,8 @@
 - ✅ 大規模コーパスでのべき等性・無破壊（ラウンドトリップ）回帰（内蔵 easy fixture 全 SQL + always-on sample corpus + optional external corpus harness `SNOW_FMT_EXTERNAL_CORPUS`、docs/CI smoke つき）。残: 公開可能な外部コーパスの継続運用
 - ✅ エディタ拡張（VS Code）パッケージング（`editors/` を extension root とする `package.json` + `language-configuration.json`）
 - ✅ Snowsight/Chrome 拡張（`sql-dialect-fmt-wasm` を `wasm32-unknown-unknown` でビルドして同梱、worksheet editor 上のボタン/拡張アイコン/`Alt+Shift+F` から整形）… [sql-dialect-fmt-wasm](crates/sql-dialect-fmt-wasm/) / [extensions/chrome](extensions/chrome/) / [build script](scripts/build-chrome-extension.sh)
+- ⏳ 公式仕様由来の conformance generator（Future Tech Blog の `uroborosql-fmt` / `postgresql-cst-parser` 型の発想を Snowflake 向けに翻訳）: Snowflake docs/examples から fixture と keyword/statement delta を生成し、parser-gap report として CI/ROADMAP 更新へつなぐ。将来、機械可読な公式 grammar が得られるなら Pure Rust CST parser 生成の候補にする。
+- ⏳ LSP lint lane: まず DB 接続なしで可能な警告（巨大 `IN` list、危険な wildcard、曖昧な object option など）から始め、将来 catalog snapshot があれば存在しない table/column や nullable join の診断へ拡張。
 
 ---
 
@@ -140,7 +143,8 @@
 
 **残りの主な未着手（価値順）**:
 1. **網羅強化**: Semantic View/Preview object option の継続追随、公開可能な外部コーパスの継続運用。
-2. **Routine body polish**: quoted body と Java/Scala formatter の限界ケース拡張。
-3. **Directive polish**: 必要なら `-- sql-dialect-fmt: off/on` の範囲制御など細部。
+2. **公式仕様由来の追随基盤**: Snowflake docs/examples miner → fixture/keyword delta/parser-gap report。将来的に Pure Rust CST parser 生成へつなげる余地を残す。
+3. **Routine body polish**: quoted body と Java/Scala formatter の限界ケース拡張。
+4. **Directive polish**: 必要なら `-- sql-dialect-fmt: off/on` の範囲制御など細部。
 
 回帰ゲートは `cargo test --workspace`（golden=insta、full/sql-only、lexer/parser recovery、lexical highlight、Tree-sitter、formatter べき等/ラウンドトリップ）＋ `cargo clippy --workspace --all-targets` ＋ `cargo fmt --all --check`。
