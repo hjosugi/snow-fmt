@@ -13,7 +13,7 @@
 //! punctuation token), the whole statement falls back to a **verbatim** copy, so the formatter
 //! never drops or mangles a comment. Round-trip and idempotency tests guard these guarantees.
 
-use snow_fmt_syntax::{SyntaxKind, SyntaxNode, SyntaxToken};
+use snow_fmt_syntax::{Dialect, SyntaxKind, SyntaxNode, SyntaxToken};
 use SyntaxKind::*;
 
 use crate::doc::{
@@ -41,6 +41,9 @@ pub(crate) struct Ctx {
     pub uppercase_keywords: bool,
     pub line_width: usize,
     pub indent_width: usize,
+    /// The SQL dialect being formatted. Used to parse the source with matching grammar/lexing
+    /// rules; dialect-specific lowering will gate on this in later phases.
+    pub dialect: Dialect,
 }
 
 /// Lower a `SOURCE_FILE` node into a document: each statement formatted, separated by a blank line,

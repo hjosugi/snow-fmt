@@ -353,6 +353,7 @@ fn body_delimiters_are_table_driven_for_future_snowflake_changes() {
         sql,
         LexOptions {
             body_delimiters: FUTURE_DELIMITERS,
+            ..Default::default()
         },
     );
 
@@ -380,6 +381,7 @@ fn longest_body_delimiter_opener_wins() {
         sql,
         LexOptions {
             body_delimiters: OVERLAPPING_DELIMITERS,
+            ..Default::default()
         },
     );
 

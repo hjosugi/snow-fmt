@@ -25,6 +25,7 @@ mod sql;
 
 #[doc(inline)]
 pub use doc::{print, Doc, PrintOptions};
+pub use snow_fmt_syntax::Dialect;
 
 use sql::Ctx;
 
@@ -53,6 +54,8 @@ pub struct FormatOptions {
     pub indent_width: usize,
     /// Upper-case SQL keywords.
     pub uppercase_keywords: bool,
+    /// The SQL dialect to parse and format. Defaults to [`Dialect::Snowflake`].
+    pub dialect: Dialect,
 }
 
 impl Default for FormatOptions {
@@ -61,6 +64,7 @@ impl Default for FormatOptions {
             line_width: 100,
             indent_width: 4,
             uppercase_keywords: true,
+            dialect: Dialect::Snowflake,
         }
     }
 }
@@ -90,6 +94,14 @@ impl FormatOptions {
         self
     }
 
+    /// Set the SQL dialect to parse and format, returning the updated options so calls can be
+    /// chained.
+    #[must_use]
+    pub fn with_dialect(mut self, dialect: Dialect) -> Self {
+        self.dialect = dialect;
+        self
+    }
+
     fn print_options(&self) -> PrintOptions {
         PrintOptions {
             line_width: self.line_width,
@@ -102,6 +114,7 @@ impl FormatOptions {
             uppercase_keywords: self.uppercase_keywords,
             line_width: self.line_width,
             indent_width: self.indent_width,
+            dialect: self.dialect,
         }
     }
 }
@@ -113,7 +126,8 @@ impl FormatOptions {
 /// unterminated), the source is returned **unchanged** — trivially lossless and idempotent — rather
 /// than risking a mangled reflow of a fragmented tree.
 pub fn format(source: &str, options: &FormatOptions) -> String {
-    let lexed = snow_fmt_lexer::tokenize(source);
+    let ctx = options.ctx();
+    let lexed = snow_fmt_lexer::tokenize_for_dialect(source, ctx.dialect);
     if !lexed.errors.is_empty() {
         return source.to_string();
     }
@@ -124,12 +138,12 @@ pub fn format(source: &str, options: &FormatOptions) -> String {
     {
         return source.to_string();
     }
-    let parse = snow_fmt_parser::parse(source);
+    let parse = snow_fmt_parser::parse_with_dialect(source, ctx.dialect);
     if !parse.errors().is_empty() {
         return source.to_string();
     }
     let root = parse.syntax();
-    let doc = sql::lower_source(&root, options.ctx());
+    let doc = sql::lower_source(&root, ctx);
     print(&doc, &options.print_options())
 }
 

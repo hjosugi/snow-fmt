@@ -238,7 +238,7 @@ fn policy_kind_words(p: &mut Parser) {
 /// the current token into an [`OBJECT_PROPERTY`] so a surprise token can never stall the loop.
 fn object_property_region(p: &mut Parser) {
     while !at_create_body(p) && !at_stmt_terminator(p) {
-        if at_semantic_view_clause_start(p) {
+        if p.dialect().supports_semantic_view() && at_semantic_view_clause_start(p) {
             semantic_view_clause(p);
         } else if p.at(ON_KW) {
             stream_source(p);

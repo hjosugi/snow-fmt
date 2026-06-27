@@ -12,16 +12,19 @@
 //! ## Modules
 //! * `kind` — the [`SyntaxKind`] enum plus its `u16` conversions and predicates.
 //! * `keyword` — case-insensitive recognition of keyword text ([`keyword_kind`]).
+//! * `dialect` — the [`Dialect`] runtime selector threaded through lexer, parser, and formatter.
 //! * `lang` — `rowan` lossless-tree integration, behind the `rowan` feature.
 
 #[macro_use]
 mod macros;
 
+mod dialect;
 mod keyword;
 mod kind;
 #[cfg(feature = "rowan")]
 mod lang;
 
+pub use dialect::Dialect;
 pub use keyword::keyword_kind;
 pub use kind::SyntaxKind;
 

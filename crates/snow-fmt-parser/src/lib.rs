@@ -19,7 +19,7 @@ mod input;
 mod parser;
 
 pub use ast::*;
-pub use snow_fmt_syntax::{SyntaxKind, SyntaxNode};
+pub use snow_fmt_syntax::{Dialect, SyntaxKind, SyntaxNode};
 
 /// A diagnostic produced while parsing, located at a byte span into the source.
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -68,10 +68,20 @@ impl Parse {
 }
 
 /// Parse Snowflake SQL source into a lossless CST. Never panics; never loses input.
+///
+/// Equivalent to [`parse_with_dialect`] with [`Dialect::Snowflake`].
 pub fn parse(text: &str) -> Parse {
-    let lexed = snow_fmt_lexer::tokenize(text);
+    parse_with_dialect(text, Dialect::Snowflake)
+}
+
+/// Parse `text` as `dialect` into a lossless CST. Never panics; never loses input.
+///
+/// The dialect drives tokenization (so the lexer's quoting/special-token rules match) and gates
+/// which dialect-specific statements and operators the grammar accepts.
+pub fn parse_with_dialect(text: &str, dialect: Dialect) -> Parse {
+    let lexed = snow_fmt_lexer::tokenize_for_dialect(text, dialect);
     let input = input::Input::new(lexed);
-    let (events, errors) = parser::Parser::new(&input).parse();
+    let (events, errors) = parser::Parser::new(&input, dialect).parse();
     let green = builder::build_tree(input.all(), events);
     Parse { green, errors }
 }

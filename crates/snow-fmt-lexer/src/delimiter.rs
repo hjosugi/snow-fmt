@@ -6,6 +6,8 @@
 //! punctuation and semicolons. Keeping the delimiter as data makes the lexer
 //! resilient if Snowflake adds another body delimiter later.
 
+use snow_fmt_syntax::Dialect;
+
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct BodyDelimiter {
     pub name: &'static str,
@@ -38,12 +40,25 @@ pub const DEFAULT_BODY_DELIMITERS: &[BodyDelimiter] = &[DOLLAR_QUOTED_BODY];
 #[derive(Clone, Copy, Debug)]
 pub struct LexOptions<'cfg> {
     pub body_delimiters: &'cfg [BodyDelimiter],
+    /// The SQL dialect being lexed. Drives quoting and special-token behavior (`$$`/`$n`, `@stage`)
+    /// so the same lexer can serve multiple dialects. Defaults to [`Dialect::Snowflake`].
+    pub dialect: Dialect,
 }
 
 impl Default for LexOptions<'static> {
     fn default() -> Self {
         LexOptions {
             body_delimiters: DEFAULT_BODY_DELIMITERS,
+            dialect: Dialect::default(),
         }
+    }
+}
+
+impl<'cfg> LexOptions<'cfg> {
+    /// [`LexOptions`] for `dialect` with the default body delimiters, returning the updated options.
+    #[must_use]
+    pub fn with_dialect(mut self, dialect: Dialect) -> Self {
+        self.dialect = dialect;
+        self
     }
 }

@@ -22,8 +22,8 @@ mod lexer;
 mod token;
 
 pub use delimiter::{BodyDelimiter, LexOptions, DEFAULT_BODY_DELIMITERS, DOLLAR_QUOTED_BODY};
-pub use lexer::{tokenize, tokenize_with_options};
+pub use lexer::{tokenize, tokenize_for_dialect, tokenize_with_options};
 pub use token::{LexError, Lexed, Token};
 
 // Re-exported so downstream crates and integration tests can name the kind through the lexer.
-pub use snow_fmt_syntax::SyntaxKind;
+pub use snow_fmt_syntax::{Dialect, SyntaxKind};

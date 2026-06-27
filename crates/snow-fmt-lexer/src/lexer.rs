@@ -2,7 +2,7 @@
 
 use crate::token::{LexError, Lexed, Token};
 use crate::{BodyDelimiter, LexOptions};
-use snow_fmt_syntax::SyntaxKind;
+use snow_fmt_syntax::{Dialect, SyntaxKind};
 
 /// Tokenize Snowflake SQL into a lossless token stream.
 ///
@@ -13,6 +13,14 @@ pub fn tokenize(input: &str) -> Lexed<'_> {
 
 pub fn tokenize_with_options<'a>(input: &'a str, options: LexOptions<'_>) -> Lexed<'a> {
     Lexer::new(input, options).run()
+}
+
+/// Tokenize `input` for `dialect`, using that dialect's default lexing rules.
+///
+/// The dialect drives quoting and special-token behavior (`$$`/`$n` dollar handling, `@stage`
+/// references); see [`Dialect`].
+pub fn tokenize_for_dialect(input: &str, dialect: Dialect) -> Lexed<'_> {
+    tokenize_with_options(input, LexOptions::default().with_dialect(dialect))
 }
 
 struct Lexer<'a, 'cfg> {
@@ -102,12 +110,17 @@ impl<'a, 'cfg> Lexer<'a, 'cfg> {
     }
 
     fn run(mut self) -> Lexed<'a> {
+        // Dialects that support dollar quoting (`$$ … $$`) treat such a run as one body token; the
+        // rest (none yet) lex the `$` characters as ordinary operators.
+        let dollar_quoting = self.options.dialect.supports_dollar_quoting();
         while !self.at_end() {
             let start = self.pos;
-            if let Some(delimiter) = self.body_delimiter_at() {
-                self.delimited_body(start, delimiter);
-                self.push(SyntaxKind::DOLLAR_STRING, start);
-                continue;
+            if dollar_quoting {
+                if let Some(delimiter) = self.body_delimiter_at() {
+                    self.delimited_body(start, delimiter);
+                    self.push(SyntaxKind::DOLLAR_STRING, start);
+                    continue;
+                }
             }
             match self.peek() {
                 b' ' | b'\t' => {
@@ -147,8 +160,11 @@ impl<'a, 'cfg> Lexer<'a, 'cfg> {
                     self.quoted_ident_body(start);
                     self.push(SyntaxKind::QUOTED_IDENT, start);
                 }
-                // $1 / $name variables (but not body delimiters, handled above).
-                b'$' if is_ident_start(self.peek_at(1)) || self.peek_at(1).is_ascii_digit() => {
+                // $1 / $name variables (but not body delimiters, handled above). Gated on dollar
+                // quoting so non-Snowflake dialects lex a bare `$` as the DOLLAR operator instead.
+                b'$' if dollar_quoting
+                    && (is_ident_start(self.peek_at(1)) || self.peek_at(1).is_ascii_digit()) =>
+                {
                     self.pos += 1; // $
                     self.eat_while(is_ident_continue);
                     self.push(SyntaxKind::VARIABLE, start);
@@ -348,7 +364,9 @@ impl<'a, 'cfg> Lexer<'a, 'cfg> {
             b'&' => SyntaxKind::AMP,
             b'^' => SyntaxKind::CARET,
             b'~' => SyntaxKind::TILDE,
-            b'@' => SyntaxKind::AT,
+            // `@` introduces stage references (`@stage`, `@~`, `@%table`). Dialects without stage
+            // refs (none yet) treat it as an unexpected character rather than the AT operator.
+            b'@' if self.options.dialect.supports_stage_refs() => SyntaxKind::AT,
             b'?' => SyntaxKind::QUESTION,
             b'.' => SyntaxKind::DOT,
             b'$' => SyntaxKind::DOLLAR,

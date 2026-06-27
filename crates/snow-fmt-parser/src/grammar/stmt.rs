@@ -11,7 +11,7 @@ use crate::parser::Parser;
 pub(super) fn statement_or_flow(p: &mut Parser) {
     let m = p.start();
     statement(p);
-    if p.at(FLOW_PIPE) {
+    if p.dialect().supports_flow_operator() && p.at(FLOW_PIPE) {
         while p.eat(FLOW_PIPE) {
             if at_stmt_start(p) {
                 statement(p);
@@ -44,7 +44,7 @@ pub(super) fn at_stmt_start(p: &Parser) -> bool {
         || p.at(DESCRIBE_KW)
         || p.at(DESC_KW)
         || p.at(TRUNCATE_KW)
-        || super::at_block_start(p)
+        || (p.dialect().supports_scripting_blocks() && super::at_block_start(p))
         || p.at(COMMIT_KW)
         || p.at(ROLLBACK_KW)
         || super::at_begin_transaction(p)
@@ -53,7 +53,7 @@ pub(super) fn at_stmt_start(p: &Parser) -> bool {
         || p.at(CALL_KW)
         || p.at(SET_KW)
         || p.at(EXECUTE_KW)
-        || p.at(COPY_KW)
+        || (p.dialect().supports_copy_into() && p.at(COPY_KW))
         || super::at_expr_start(p)
 }
 
@@ -86,7 +86,7 @@ pub(super) fn statement(p: &mut Parser) {
         super::lenient_stmt(p, DESCRIBE_STMT);
     } else if p.at(TRUNCATE_KW) {
         super::lenient_stmt(p, TRUNCATE_STMT);
-    } else if super::at_block_start(p) {
+    } else if p.dialect().supports_scripting_blocks() && super::at_block_start(p) {
         super::block_stmt(p);
     } else if p.at(COMMIT_KW) || p.at(ROLLBACK_KW) || super::at_begin_transaction(p) {
         super::lenient_stmt(p, TRANSACTION_STMT);
@@ -100,7 +100,7 @@ pub(super) fn statement(p: &mut Parser) {
         super::set_stmt(p);
     } else if p.at(EXECUTE_KW) {
         super::execute_stmt(p);
-    } else if p.at(COPY_KW) {
+    } else if p.dialect().supports_copy_into() && p.at(COPY_KW) {
         super::copy_stmt(p);
     } else if p.at(SELECT_KW)
         || p.at(VALUES_KW)

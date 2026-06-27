@@ -6,7 +6,7 @@
 
 use std::cell::Cell;
 
-use snow_fmt_syntax::{keyword_kind, SyntaxKind};
+use snow_fmt_syntax::{keyword_kind, Dialect, SyntaxKind};
 
 use crate::event::Event;
 use crate::input::Input;
@@ -207,6 +207,7 @@ contextual_keywords! {
 
 pub(crate) struct Parser<'a> {
     input: &'a Input<'a>,
+    dialect: Dialect,
     pos: usize,
     fuel: Cell<u32>,
     events: Vec<Event>,
@@ -214,14 +215,21 @@ pub(crate) struct Parser<'a> {
 }
 
 impl<'a> Parser<'a> {
-    pub(crate) fn new(input: &'a Input<'a>) -> Self {
+    pub(crate) fn new(input: &'a Input<'a>, dialect: Dialect) -> Self {
         Parser {
             input,
+            dialect,
             pos: 0,
             fuel: Cell::new(INITIAL_FUEL),
             events: Vec::new(),
             errors: Vec::new(),
         }
+    }
+
+    /// The SQL dialect this parse targets. Grammar branches that recognize dialect-specific
+    /// constructs gate on this via the [`Dialect`] predicate methods.
+    pub(crate) fn dialect(&self) -> Dialect {
+        self.dialect
     }
 
     pub(crate) fn parse(mut self) -> (Vec<Event>, Vec<ParseError>) {
