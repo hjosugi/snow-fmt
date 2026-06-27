@@ -233,8 +233,15 @@ impl<'a> Parser<'a> {
         self.pos >= self.input.len()
     }
 
+    pub(crate) fn pos(&self) -> usize {
+        self.pos
+    }
+
     /// Raw kind `n` tokens ahead, consuming a unit of fuel (the loop guard).
     fn nth(&self, n: usize) -> SyntaxKind {
+        if self.pos + n >= self.input.len() {
+            return SyntaxKind::EOF;
+        }
         assert_ne!(
             self.fuel.get(),
             0,

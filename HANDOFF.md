@@ -17,7 +17,7 @@
 - **SQL 整形**: SELECT パイプライン、JOIN/ORDER BY/GROUP BY 構造化、CASE、サブクエリ/CTE、集合演算、**magic trailing comma**（看板機能）、**本物のコメント付与**（leading/trailing/dangling）。
 - **構文拡張（パーサ）**: 集約 `DISTINCT`、`WITHIN GROUP`、`PIVOT/UNPIVOT`、`GROUPING SETS/CUBE/ROLLUP`、`LATERAL FLATTEN`/テーブル関数/名前付き引数、`MATCH_RECOGNIZE`、`ASOF JOIN`、time travel `AT/BEFORE`、`IS [NOT] DISTINCT FROM`、`FROM VALUES`、`WITH` を query primary に。
 - **DML**: `INSERT`（単一/`OVERWRITE`/`ALL`/`FIRST`）, `UPDATE`, `DELETE`, `MERGE`。
-- **DDL**: `CREATE TABLE/VIEW/CTAS`, `DROP`, `ALTER`(寛容), `CREATE PROCEDURE/FUNCTION` 骨格（`$$…$$` ボディ verbatim）。
+- **DDL**: `CREATE TABLE/VIEW/CTAS`, `DROP`, `ALTER`(寛容), `CREATE PROCEDURE/FUNCTION` 骨格（`LANGUAGE SQL` の `$$…$$` ボディは自己再帰整形、非 SQL/quoted body は verbatim）。
 - **COPY INTO**（ロード/アンロード、ステージパス verbatim、option key の key-position 大文字化）。
 - **CLI `snow-fmt`**: `--write`/`--check`/stdin、複数ファイル/ディレクトリ再帰、`snow-fmt.toml` discovery、エンコーディング保持（v0.1.0、`cargo install` 可）。
 - **診断品質**: lexer/parser error span（token 全体、EOF zero-width）、人間向け `SyntaxKind::describe`、LSP diagnostics に lexer error も反映。
@@ -62,7 +62,7 @@
 設計の真実の源は **rowan CST**。tree-sitter は競合させず、エディタ向けの寛容・高速な認識層という役割分担。
 
 ## 3. 次の優先タスク（順番）
-1. **埋め込み言語の次段**: `$$…$$` body の言語判定 → JS は Biome、SQL は自己再帰、Python は方針決定。procedure body は今は verbatim で無破壊。
+1. **埋め込み言語の次段**: `$$…$$` body の言語判定 → JS は Biome、Python は方針決定。`LANGUAGE SQL` procedure/function body は自己再帰整形済みで、非 SQL/quoted body は今は verbatim で無破壊。
 2. **DDL の残り**: マスキング/行アクセスポリシー、タグ、Semantic View、細かい object option の構造化。新しめの仕様は Snowflake 公式 docs で確認してから入れる。
 3. **rich hover / spec 連携**: §4 の通り、まず keyword/function hover を `spec/seed/features.json` 由来にする。
 4. **editor 周辺**: tree-sitter expression/context-aware injections/indents、VS Code 拡張。

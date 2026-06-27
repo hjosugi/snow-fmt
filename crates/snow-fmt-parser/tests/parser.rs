@@ -385,6 +385,8 @@ fn never_panics_on_adversarial_input() {
         "SELECT 中文 FROM 表 WHERE x = '💥'",
         "a.b.c.d.e.f.g",
         "1 +",
+        "exists = + select$$(a(a$$ and null cluster select ",
+        "cluster = + select$$(a(a$$ and null cluster select ",
         ")",
     ] {
         assert_parse_roundtrip(s);

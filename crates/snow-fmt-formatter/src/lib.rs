@@ -100,6 +100,8 @@ impl FormatOptions {
     fn ctx(&self) -> Ctx {
         Ctx {
             uppercase_keywords: self.uppercase_keywords,
+            line_width: self.line_width,
+            indent_width: self.indent_width,
         }
     }
 }
@@ -131,7 +133,7 @@ pub fn format(source: &str, options: &FormatOptions) -> String {
     print(&doc, &options.print_options())
 }
 
-fn multiline_token_has_line_trailing_space(text: &str) -> bool {
+pub(crate) fn multiline_token_has_line_trailing_space(text: &str) -> bool {
     text.lines()
         .any(|line| line.ends_with(' ') || line.ends_with('\t'))
 }

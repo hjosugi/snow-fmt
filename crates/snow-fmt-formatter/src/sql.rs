@@ -20,7 +20,7 @@ use SyntaxKind::*;
 
 use crate::doc::{
     break_parent, concat, empty, group, group_expanded, hard_line, indent, join, line, line_suffix,
-    soft_line, space, text, Doc,
+    print, soft_line, space, text, Doc, PrintOptions,
 };
 
 /// Formatting context.
@@ -28,6 +28,8 @@ use crate::doc::{
 pub(crate) struct Ctx {
     /// Upper-case SQL keywords (opinionated default on).
     pub uppercase_keywords: bool,
+    pub line_width: usize,
+    pub indent_width: usize,
 }
 
 /// Lower a `SOURCE_FILE` node into a document: each statement formatted, separated by a blank line,
@@ -72,7 +74,8 @@ pub(crate) fn lower_source(root: &SyntaxNode, ctx: Ctx) -> Doc {
 }
 
 /// Lower one statement. Builds its comment attachment, lowers structurally, and — if any comment
-/// could not be placed onto an emitted token — falls back to an exact verbatim copy.
+/// could not be placed onto an emitted token — falls back to the statement text with surrounding
+/// whitespace trimmed so statement separators remain idempotent.
 fn lower_stmt(stmt: &SyntaxNode, ctx: Ctx) -> LoweredStmt {
     let mut comments = Comments::build(stmt);
     let end_comments = comments.take_statement_end_comments(stmt);
@@ -87,7 +90,7 @@ fn lower_stmt(stmt: &SyntaxNode, ctx: Ctx) -> LoweredStmt {
     let body = if low.comments.all_placed() {
         concat(vec![prefix, body])
     } else {
-        verbatim(stmt)
+        trimmed_text(stmt)
     };
     LoweredStmt { body, end_comments }
 }
@@ -291,6 +294,13 @@ impl Lowerer {
     /// a plain identifier in the tree — used for recognized option-key words (see
     /// [`Self::lower_option_node`]). It only ever changes ASCII case, never the spelling.
     fn token_cased(&mut self, token: &SyntaxToken, force_keyword: bool) -> Doc {
+        self.token_rendered(token, keyword_text_forced(token, self.ctx, force_keyword))
+    }
+
+    /// Emit a token's spacing/comments while replacing its rendered text. Used for embedded SQL
+    /// routine bodies: the CST token is still a single `DOLLAR_STRING`, but its body may be
+    /// reformatted if it is declared as SQL.
+    fn token_rendered(&mut self, token: &SyntaxToken, rendered: Doc) -> Doc {
         let start = offset(token);
         let leading = self.comments.leading.remove(&start).unwrap_or_default();
         let trailing = self.comments.trailing.remove(&start).unwrap_or_default();
@@ -320,7 +330,7 @@ impl Lowerer {
         };
         self.advance(token.kind());
         parts.push(sep);
-        parts.push(keyword_text_forced(token, self.ctx, force_keyword));
+        parts.push(rendered);
         for comment in trailing {
             if comment.is_line {
                 // A line comment must end its line: defer it, and force the line to break.
@@ -488,6 +498,9 @@ impl Lowerer {
     /// (`KEY = value`), the stream source (`ON …`), and a task's `AFTER …` predecessor list each get
     /// their own indented line; a `TASK`/`DYNAMIC TABLE` body after `AS` is laid out structurally.
     fn lower_create(&mut self, node: &SyntaxNode) -> Doc {
+        if is_create_routine(node) {
+            return self.lower_create_routine(node);
+        }
         // Properties / clauses that stack one-per-line, indented under the CREATE header.
         let has_props = node
             .children()
@@ -505,6 +518,33 @@ impl Lowerer {
                 )
             },
         )
+    }
+
+    /// `CREATE PROCEDURE/FUNCTION ... AS $$ ... $$`: keep the signature inline, and for
+    /// `LANGUAGE SQL` bodies recursively format the dollar-quoted SQL/Scripting body. Other
+    /// languages remain verbatim until their dedicated sub-formatters land.
+    fn lower_create_routine(&mut self, node: &SyntaxNode) -> Doc {
+        let format_sql_body = routine_body_language(node).unwrap_or(RoutineBodyLanguage::Sql)
+            == RoutineBodyLanguage::Sql;
+        let mut parts = Vec::new();
+        for child in node.children_with_tokens() {
+            if let Some(token) = child.as_token() {
+                if token.kind().is_trivia() {
+                    continue;
+                }
+                if token.kind() == DOLLAR_STRING && format_sql_body {
+                    if let Some(formatted) = format_embedded_sql_dollar_body(token.text(), self.ctx)
+                    {
+                        parts.push(self.token_rendered(token, text(formatted)));
+                        continue;
+                    }
+                }
+                parts.push(self.token(token));
+            } else if let Some(node) = child.as_node() {
+                parts.push(self.lower_node(node));
+            }
+        }
+        concat(parts)
     }
 
     /// Object DDL with a property region: the `CREATE <kind> <name> [(cols)]` header stays inline,
@@ -1373,6 +1413,73 @@ fn paren_list_has_trailing_comma(node: &SyntaxNode) -> bool {
     last == Some(R_PAREN) && prev == Some(COMMA)
 }
 
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+enum RoutineBodyLanguage {
+    Sql,
+    Other,
+}
+
+fn is_create_routine(node: &SyntaxNode) -> bool {
+    node.children_with_tokens()
+        .filter(|el| !el.kind().is_trivia())
+        .any(|el| matches!(el.kind(), PROCEDURE_KW | FUNCTION_KW))
+}
+
+fn routine_body_language(node: &SyntaxNode) -> Option<RoutineBodyLanguage> {
+    let mut after_language = false;
+    for token in node
+        .children_with_tokens()
+        .filter_map(|el| el.into_token())
+        .filter(|token| !token.kind().is_trivia())
+    {
+        if after_language {
+            return Some(
+                if token.kind() == SQL_KW || token.text().eq_ignore_ascii_case("sql") {
+                    RoutineBodyLanguage::Sql
+                } else {
+                    RoutineBodyLanguage::Other
+                },
+            );
+        }
+        after_language = token.kind() == LANGUAGE_KW;
+    }
+    None
+}
+
+fn format_embedded_sql_dollar_body(text: &str, ctx: Ctx) -> Option<String> {
+    let body = text.strip_prefix("$$")?.strip_suffix("$$")?;
+    let source = body.trim();
+    if source.is_empty() {
+        return None;
+    }
+    let lexed = snow_fmt_lexer::tokenize(source);
+    if !lexed.errors.is_empty()
+        || lexed.tokens.iter().any(|token| {
+            !token.kind.is_trivia() && crate::multiline_token_has_line_trailing_space(token.text)
+        })
+    {
+        return None;
+    }
+
+    let parse = snow_fmt_parser::parse(source);
+    if !parse.errors().is_empty() {
+        return None;
+    }
+    let doc = lower_source(&parse.syntax(), ctx);
+    let formatted = print(
+        &doc,
+        &PrintOptions {
+            line_width: ctx.line_width,
+            indent_width: ctx.indent_width,
+        },
+    );
+    if formatted.is_empty() {
+        None
+    } else {
+        Some(format!("$$\n{formatted}$$"))
+    }
+}
+
 /// Token text, upper-cased if it is a keyword and keyword-casing is enabled.
 ///
 /// `force_keyword` treats the token as a keyword for casing even though it is a plain identifier in
@@ -1533,6 +1640,14 @@ const OPTION_FLAGS: &[&str] = &["noorder", "order"];
 
 /// Whether a single space belongs between adjacent tokens `prev` and `cur`.
 fn needs_space(prev: SyntaxKind, cur: SyntaxKind) -> bool {
+    // Keep a numeric literal followed by a standalone dot from merging into a different token
+    // (`0 .` must not become the float literal `0.` in lenient statement tails).
+    if matches!(prev, INT_NUMBER | FLOAT_NUMBER) && cur == DOT {
+        return true;
+    }
+    if prev == DOT && matches!(cur, INT_NUMBER | FLOAT_NUMBER) {
+        return true;
+    }
     // Tokens that hug what precedes them.
     if matches!(
         cur,
@@ -1586,11 +1701,6 @@ fn is_value_end(kind: SyntaxKind) -> bool {
             | FALSE_KW
             | END_KW
     )
-}
-
-/// Reproduce a node's source text exactly (including its inner trivia/comments).
-fn verbatim(node: &SyntaxNode) -> Doc {
-    text(node.text().to_string())
 }
 
 /// A node's source text with surrounding whitespace removed, materialized in a single allocation.

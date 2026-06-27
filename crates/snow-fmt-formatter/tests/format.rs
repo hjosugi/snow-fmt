@@ -52,6 +52,22 @@ fn upcases_keywords_and_normalizes_spacing() {
 }
 
 #[test]
+fn number_followed_by_standalone_dot_does_not_merge_into_float() {
+    assert_eq!(fmt("desc select 0 . "), "DESC SELECT 0 .;\n");
+}
+
+#[test]
+fn standalone_dot_followed_by_number_does_not_merge_into_float() {
+    assert_eq!(fmt("desc . 42 "), "DESC. 42;\n");
+}
+
+#[test]
+fn verbatim_statement_with_leading_trivia_is_idempotent() {
+    let out = fmt("cluster 'abc' ->>-- c\n'abc' ");
+    assert_eq!(fmt(&out), out);
+}
+
+#[test]
 fn keeps_qualified_names_and_calls_tight() {
     assert_eq!(
         fmt("select count(*), t.a, x::int from s.t"),
@@ -433,19 +449,25 @@ fn pivot_and_unpivot_are_kept() {
 }
 
 #[test]
-fn procedure_header_is_structured_and_body_is_verbatim() {
+fn sql_procedure_body_is_recursively_formatted() {
     let src = "create or replace procedure p(x int) returns int language sql as $$\nbegin\n  return x;\nend\n$$";
     let out = fmt(src);
-    // Header reflowed/up-cased, the delimited body preserved verbatim.
-    assert!(
-        out.starts_with("CREATE OR REPLACE PROCEDURE p (x int) RETURNS int LANGUAGE SQL AS $$"),
-        "header not structured: {out:?}"
-    );
-    assert!(
-        out.contains("\nbegin\n  return x;\nend\n$$"),
-        "body changed: {out:?}"
+    assert_eq!(
+        out,
+        "CREATE OR REPLACE PROCEDURE p (x int) RETURNS int LANGUAGE SQL AS $$\nBEGIN\n    RETURN x;\nEND;\n$$;\n"
     );
     assert_eq!(fmt(&out), out, "not idempotent");
+}
+
+#[test]
+fn non_sql_routine_body_stays_verbatim_for_now() {
+    let src = "create function f() returns string language javascript as $$ return 'x'; $$";
+    let out = fmt(src);
+    assert_eq!(
+        out,
+        "CREATE FUNCTION f () RETURNS string LANGUAGE JAVASCRIPT AS $$ return 'x'; $$;\n"
+    );
+    assert_eq!(fmt(&out), out);
 }
 
 #[test]

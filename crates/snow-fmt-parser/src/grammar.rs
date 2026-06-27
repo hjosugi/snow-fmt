@@ -143,7 +143,11 @@ fn statement(p: &mut Parser) {
         query_expr(p);
     } else {
         let m = p.start();
+        let before = p.pos();
         expr(p);
+        if p.pos() == before {
+            p.err_and_bump("expected an expression");
+        }
         m.complete(p, EXPR_STMT);
     }
 }
@@ -2217,13 +2221,13 @@ fn at_expr_start(p: &Parser) -> bool {
         || p.at(MINUS)
         || p.at(PLUS)
         || p.at(NOT_KW)
-        || p.at(EXISTS_KW)
+        || (p.at(EXISTS_KW) && p.nth_at(1, L_PAREN))
         || p.at(CASE_KW)
         || p.at(CAST_KW)
         || p.at(TRY_CAST_KW)
         || p.at(FLATTEN_KW)
         || p.at_name()
-        || (p.at_keyword() && p.nth_at(1, L_PAREN)) // a keyword used as a function name: first(x)
+        || at_keyword_call_name(p) // a keyword used as a function name: first(x)
 }
 
 pub(crate) fn expr(p: &mut Parser) {
@@ -2391,7 +2395,7 @@ fn primary(p: &mut Parser) -> Option<CompletedMarker> {
         let m = p.start();
         p.bump_any();
         m.complete(p, LITERAL)
-    } else if p.at(EXISTS_KW) {
+    } else if p.at(EXISTS_KW) && p.nth_at(1, L_PAREN) {
         let m = p.start();
         p.bump(EXISTS_KW);
         subquery(p);
@@ -2413,7 +2417,7 @@ fn primary(p: &mut Parser) -> Option<CompletedMarker> {
         let m = p.start();
         p.bump(FLATTEN_KW);
         m.complete(p, NAME_REF)
-    } else if p.at_keyword() && p.nth_at(1, L_PAREN) {
+    } else if at_keyword_call_name(p) {
         // A keyword-spelled word used as a function name (`first(x)`, `last(x)`, `left(s, 2)`):
         // tag it as a plain name so the postfix `(` makes it a CALL_EXPR and it formats like any
         // other call (lower-case, hugging its parens).
@@ -2423,10 +2427,14 @@ fn primary(p: &mut Parser) -> Option<CompletedMarker> {
     } else if p.at_name() {
         name_ref(p)
     } else {
-        p.error("expected an expression");
+        p.err_and_bump("expected an expression");
         return None;
     };
     Some(cm)
+}
+
+fn at_keyword_call_name(p: &Parser) -> bool {
+    (p.at(FIRST_KW) || p.at(LAST_KW) || p.at(LEFT_KW) || p.at(RIGHT_KW)) && p.nth_at(1, L_PAREN)
 }
 
 fn is_rhs(p: &mut Parser) {
@@ -2485,7 +2493,9 @@ fn arg_list(p: &mut Parser) {
             arg(p);
         }
     }
-    p.expect(R_PAREN);
+    if !p.eat(R_PAREN) {
+        p.err_and_bump(format!("expected {}", R_PAREN.describe()));
+    }
     m.complete(p, ARG_LIST);
 }
 
