@@ -1,6 +1,16 @@
 name: Corpus
 
 on:
+  workflow_dispatch:
+    inputs:
+      corpus_url:
+        description: "Optional .tar.gz/.tgz/.tar/.zip corpus archive URL"
+        required: false
+      corpus_limit:
+        description: "Optional max number of SQL files to check"
+        required: false
+  schedule:
+    - cron: "17 3 * * 1"
   pull_request:
   push:
     branches:
@@ -8,12 +18,30 @@ on:
 
 jobs:
   external-corpus:
-    name: External corpus (sample)
+    name: External corpus
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
       - uses: dtolnay/rust-toolchain@stable
-      - name: Run external-corpus harness over the committed sample
+      - name: Run external-corpus harness
         env:
-          SNOW_FMT_EXTERNAL_CORPUS: crates/sql-dialect-fmt-formatter/tests/corpus_sample
-        run: cargo test -p sql-dialect-fmt-formatter --test external_corpus -- --ignored
+          DISPATCH_CORPUS_URL: ${{ github.event.inputs.corpus_url }}
+          CONFIGURED_CORPUS_URL: ${{ vars.SQL_DIALECT_FMT_EXTERNAL_CORPUS_URL }}
+          DISPATCH_CORPUS_LIMIT: ${{ github.event.inputs.corpus_limit }}
+          CONFIGURED_CORPUS_LIMIT: ${{ vars.SQL_DIALECT_FMT_EXTERNAL_CORPUS_LIMIT }}
+        run: |
+          url="${DISPATCH_CORPUS_URL:-${CONFIGURED_CORPUS_URL:-}}"
+          limit="${DISPATCH_CORPUS_LIMIT:-${CONFIGURED_CORPUS_LIMIT:-}}"
+
+          args=()
+          if [ -n "$url" ]; then
+            args+=(--url "$url")
+          else
+            args+=(--sample)
+          fi
+
+          if [ -n "$limit" ]; then
+            args+=(--limit "$limit")
+          fi
+
+          ./scripts/run-external-corpus.sh "${args[@]}"

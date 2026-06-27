@@ -44,15 +44,48 @@ external harness below.
 Point the harness at one or more local files or directories:
 
 ```sh
-SNOW_FMT_EXTERNAL_CORPUS=/path/to/sqls \
+SQL_DIALECT_FMT_EXTERNAL_CORPUS=/path/to/sqls \
   cargo test -p sql-dialect-fmt-formatter --test external_corpus -- --ignored
 ```
 
-`SNOW_FMT_EXTERNAL_CORPUS` accepts a path-list of files and directories. Directories are recursed
-for `*.sql` files case-insensitively. Relative paths are resolved from Cargo's test working
+`SQL_DIALECT_FMT_EXTERNAL_CORPUS` accepts a path-list of files and directories. Directories are
+recursed for `*.sql` files case-insensitively. Relative paths are resolved from Cargo's test working
 directory and, if needed, from the workspace root so CI can pass `crates/...` paths directly.
-`SNOW_FMT_EXTERNAL_CORPUS_LIMIT` caps the number of files for quick smoke runs, and non-UTF-8 files
-are skipped.
+`SQL_DIALECT_FMT_EXTERNAL_CORPUS_LIMIT` caps the number of files for quick smoke runs, and non-UTF-8
+files are skipped. The legacy `SNOW_FMT_EXTERNAL_CORPUS` and `SNOW_FMT_EXTERNAL_CORPUS_LIMIT` names
+are still accepted for compatibility.
+
+The wrapper script supports local paths, the committed sample corpus, and downloaded archives:
+
+```sh
+scripts/run-external-corpus.sh --sample
+scripts/run-external-corpus.sh --path /path/to/sqls --limit 500
+scripts/run-external-corpus.sh --url https://example.com/sql-corpus.tar.gz --limit 500
+```
+
+## Continuous Operation
+
+`.github/workflows/corpus.yml` runs on every pull request, on `main`, and weekly. By default it
+checks the committed sample corpus. To make the weekly run cover a broader private or generated
+corpus, configure repository variables:
+
+| Variable | Meaning |
+| --- | --- |
+| `SQL_DIALECT_FMT_EXTERNAL_CORPUS_URL` | Optional `.tar.gz`, `.tgz`, `.tar`, or `.zip` archive URL containing `.sql` files. |
+| `SQL_DIALECT_FMT_EXTERNAL_CORPUS_LIMIT` | Optional cap for smoke runs over very large corpora. |
+
+The same values can be supplied through the workflow-dispatch inputs `corpus_url` and
+`corpus_limit` for one-off runs.
+
+The repository is currently configured to run the external workflow against a pinned public
+dbt corpus seed:
+
+```text
+https://github.com/dbt-labs/jaffle-shop/archive/08ef1d578de5b55f226aae34f30d7077df8e9f35.tar.gz
+```
+
+That seed is intentionally not vendored into this repository; update the repository variable when
+rotating to a broader public or private corpus.
 
 The external corpus does not need to be preformatted; only the invariants are checked. The run
 collects every offending file before failing, so one pass gives the full list.

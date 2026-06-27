@@ -6,11 +6,11 @@
 //!   `tests/corpus_sample/`, so `cargo test --workspace` always exercises end-to-end coverage of the
 //!   major statement families.
 //! * [`external_corpus_preserves_formatter_invariants`] is `#[ignore]`d by default. Point
-//!   `SNOW_FMT_EXTERNAL_CORPUS` at one or more files/directories (path-list separated) to run the
+//!   `SQL_DIALECT_FMT_EXTERNAL_CORPUS` at one or more files/directories (path-list separated) to run the
 //!   identical checks over a large, out-of-repo corpus:
 //!
 //!   ```sh
-//!   SNOW_FMT_EXTERNAL_CORPUS=/path/to/sqls \
+//!   SQL_DIALECT_FMT_EXTERNAL_CORPUS=/path/to/sqls \
 //!     cargo test -p sql-dialect-fmt-formatter --test external_corpus -- --ignored
 //!   ```
 //!
@@ -26,6 +26,11 @@ use sql_dialect_fmt_formatter::{format, FormatOptions};
 use sql_dialect_fmt_lexer::tokenize;
 use sql_dialect_fmt_parser::parse;
 use sql_dialect_fmt_syntax::SyntaxKind;
+
+const EXTERNAL_CORPUS_ENV: &str = "SQL_DIALECT_FMT_EXTERNAL_CORPUS";
+const EXTERNAL_CORPUS_LIMIT_ENV: &str = "SQL_DIALECT_FMT_EXTERNAL_CORPUS_LIMIT";
+const LEGACY_EXTERNAL_CORPUS_ENV: &str = "SNOW_FMT_EXTERNAL_CORPUS";
+const LEGACY_EXTERNAL_CORPUS_LIMIT_ENV: &str = "SNOW_FMT_EXTERNAL_CORPUS_LIMIT";
 
 /// A single offending file and the invariant it broke, formatted for a clear test failure.
 #[derive(Debug)]
@@ -176,10 +181,9 @@ fn sample_corpus_is_clean() {
 }
 
 #[test]
-#[ignore = "set SNOW_FMT_EXTERNAL_CORPUS to one or more SQL files/directories"]
+#[ignore = "set SQL_DIALECT_FMT_EXTERNAL_CORPUS to one or more SQL files/directories"]
 fn external_corpus_preserves_formatter_invariants() {
-    let roots = env::var_os("SNOW_FMT_EXTERNAL_CORPUS")
-        .expect("SNOW_FMT_EXTERNAL_CORPUS must point at SQL files/directories");
+    let roots = external_corpus_roots();
     let mut files = Vec::new();
     for root in env::split_paths(&roots) {
         let root = resolve_corpus_root(root);
@@ -188,13 +192,29 @@ fn external_corpus_preserves_formatter_invariants() {
     files.sort();
     files.dedup();
 
-    let limit = env::var("SNOW_FMT_EXTERNAL_CORPUS_LIMIT")
-        .ok()
-        .and_then(|value| value.parse::<usize>().ok())
-        .unwrap_or(usize::MAX);
+    let limit = external_corpus_limit();
     files.truncate(limit);
 
     run_corpus(&files, "external_corpus");
+}
+
+fn external_corpus_roots() -> std::ffi::OsString {
+    env::var_os(EXTERNAL_CORPUS_ENV)
+        .or_else(|| env::var_os(LEGACY_EXTERNAL_CORPUS_ENV))
+        .unwrap_or_else(|| {
+            panic!(
+                "{EXTERNAL_CORPUS_ENV} must point at SQL files/directories \
+                 ({LEGACY_EXTERNAL_CORPUS_ENV} is still accepted for compatibility)"
+            )
+        })
+}
+
+fn external_corpus_limit() -> usize {
+    env::var(EXTERNAL_CORPUS_LIMIT_ENV)
+        .or_else(|_| env::var(LEGACY_EXTERNAL_CORPUS_LIMIT_ENV))
+        .ok()
+        .and_then(|value| value.parse::<usize>().ok())
+        .unwrap_or(usize::MAX)
 }
 
 fn collect_sql_files(path: &Path, out: &mut Vec<PathBuf>) {

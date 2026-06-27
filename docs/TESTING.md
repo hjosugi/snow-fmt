@@ -94,4 +94,4 @@ Formatter corpus checks have one additional always-on layer:
 `crates/sql-dialect-fmt-formatter/tests/corpus_sample/`. These files are committed in
 formatter-canonical form and are checked by `external_corpus.rs` for
 idempotency, significant-token preservation, and clean reparse. Larger local or
-private corpora should use `SNOW_FMT_EXTERNAL_CORPUS`; see `docs/CORPUS.md`.
+private corpora should use `SQL_DIALECT_FMT_EXTERNAL_CORPUS`; see `docs/CORPUS.md`.
