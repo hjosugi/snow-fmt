@@ -20,6 +20,7 @@ Published to crates.io (in dependency order):
 | 7 | `sql-dialect-fmt-encoding` | — |
 | 8 | `sql-dialect-fmt` | encoding, formatter |
 | 9 | `sql-dialect-fmt-lsp` | formatter, highlight, hover, parser, syntax |
+| 10 | `sql-dialect-fmt-wasm` | formatter |
 
 **Not published** (`publish = false`):
 
@@ -53,10 +54,15 @@ Published to crates.io (in dependency order):
 
    ```sh
    cargo publish --dry-run -p sql-dialect-fmt-syntax
+   cargo publish --dry-run -p sql-dialect-fmt-lexer
    cargo publish --dry-run -p sql-dialect-fmt-parser
    cargo publish --dry-run -p sql-dialect-fmt-formatter
+   cargo publish --dry-run -p sql-dialect-fmt-highlight
+   cargo publish --dry-run -p sql-dialect-fmt-hover
+   cargo publish --dry-run -p sql-dialect-fmt-encoding
    cargo publish --dry-run -p sql-dialect-fmt
-   # (and the rest below)
+   cargo publish --dry-run -p sql-dialect-fmt-lsp
+   cargo publish --dry-run -p sql-dialect-fmt-wasm
    ```
 
    (`cargo package -p <crate>` produces the tarball without the dry-run upload check.)
@@ -82,10 +88,12 @@ Published to crates.io (in dependency order):
    cargo publish -p sql-dialect-fmt-encoding
    cargo publish -p sql-dialect-fmt
    cargo publish -p sql-dialect-fmt-lsp
+   cargo publish -p sql-dialect-fmt-wasm
    ```
 
    The canonical order is **syntax → lexer → parser → formatter → highlight → hover →
-   cli / lsp** (with `encoding` published any time before `cli`).
+   cli / lsp / wasm** (with `encoding` published any time before `cli`, and `wasm`
+   any time after `formatter`).
 
 ## Notes
 
