@@ -6,6 +6,58 @@ This is the no-decision path for the remaining one-time store setup. After this 
 `v*.*.*` tag pushes can publish the VS Code Marketplace package and Chrome Web Store package
 automatically through `.github/workflows/extensions.yml`.
 
+## Link Deck
+
+Open these from top to bottom. The workflow/helper commands later in this document fill in the
+repo-side settings, so the links below are only for the store and cloud-console tasks that must be
+done in a browser.
+
+| Task | Link |
+| --- | --- |
+| GitHub repo | [hjosugi/sql-dialect-fmt](https://github.com/hjosugi/sql-dialect-fmt) |
+| GitHub CLI | [Install gh](https://cli.github.com/) |
+| Extension package workflow | [Extension Packages workflow](https://github.com/hjosugi/sql-dialect-fmt/actions/workflows/extensions.yml) |
+| GitHub Actions variables | [Repository variables](https://github.com/hjosugi/sql-dialect-fmt/settings/variables/actions) |
+| GitHub Actions secrets | [Repository secrets](https://github.com/hjosugi/sql-dialect-fmt/settings/secrets/actions) |
+| Privacy policy URL to paste into stores | [docs/PRIVACY.md](https://github.com/hjosugi/sql-dialect-fmt/blob/main/docs/PRIVACY.md) |
+| VS Code Marketplace publisher console | [Visual Studio Marketplace manage](https://marketplace.visualstudio.com/manage) |
+| VS Code publisher after creation | [sql-dialect-fmt publisher page](https://marketplace.visualstudio.com/manage/publishers/sql-dialect-fmt) |
+| Azure DevOps PATs | [Personal Access Tokens](https://dev.azure.com/_usersSettings/tokens) |
+| VS Code publishing docs | [Publishing Extensions](https://code.visualstudio.com/api/working-with-extensions/publishing-extension) |
+| Microsoft Entra app registrations | [App registrations](https://entra.microsoft.com/#view/Microsoft_AAD_RegisteredApps/ApplicationsListBlade) |
+| Google account 2-step verification | [2-Step Verification](https://myaccount.google.com/signinoptions/two-step-verification) |
+| Chrome Web Store dashboard | [Developer Dashboard](https://chrome.google.com/webstore/developer/dashboard) |
+| Chrome developer account setup | [Set up your developer account](https://developer.chrome.com/docs/webstore/set-up-account) |
+| Chrome listing fields | [Complete your listing information](https://developer.chrome.com/docs/webstore/cws-dashboard-listing) |
+| Chrome privacy fields | [Fill out the privacy fields](https://developer.chrome.com/docs/webstore/cws-dashboard-privacy) |
+| Chrome distribution fields | [Set your distribution options](https://developer.chrome.com/docs/webstore/cws-dashboard-distribution) |
+| Google Cloud project creation | [Create project](https://console.cloud.google.com/projectcreate) |
+| Chrome Web Store API enablement | [Chrome Web Store API](https://console.cloud.google.com/apis/library/chromewebstore.googleapis.com) |
+| OAuth consent screen | [OAuth consent](https://console.cloud.google.com/apis/credentials/consent) |
+| OAuth credentials | [Credentials](https://console.cloud.google.com/apis/credentials) |
+| OAuth Playground | [OAuth 2.0 Playground](https://developers.google.com/oauthplayground) |
+| Chrome Web Store API docs | [Use the Chrome Web Store API](https://developer.chrome.com/docs/webstore/using-api) |
+
+Optional: open the main browser pages at once from the workspace root:
+
+```sh
+python3 - <<'PY'
+import webbrowser
+for url in [
+    "https://marketplace.visualstudio.com/manage",
+    "https://dev.azure.com/_usersSettings/tokens",
+    "https://chrome.google.com/webstore/developer/dashboard",
+    "https://console.cloud.google.com/projectcreate",
+    "https://console.cloud.google.com/apis/library/chromewebstore.googleapis.com",
+    "https://console.cloud.google.com/apis/credentials/consent",
+    "https://console.cloud.google.com/apis/credentials",
+    "https://developers.google.com/oauthplayground",
+    "https://github.com/hjosugi/sql-dialect-fmt/actions/workflows/extensions.yml",
+]:
+    webbrowser.open(url)
+PY
+```
+
 ## Repo Values
 
 Use these exact values unless the store says the ID is unavailable:
@@ -30,6 +82,7 @@ first-release path. Microsoft says global Azure DevOps PATs retire on 2026-12-01
 Entra ID path below before that date.
 
 ```sh
+gh --version
 gh auth status || gh auth login
 ./scripts/package-extensions.sh
 ```
@@ -39,12 +92,12 @@ repository variables and secrets.
 
 ## VS Code Marketplace
 
-1. Open `https://marketplace.visualstudio.com/manage`.
+1. Open [Visual Studio Marketplace manage](https://marketplace.visualstudio.com/manage).
 2. Sign in with the Microsoft account that should own the extension.
 3. Create a publisher:
    - ID: `sql-dialect-fmt`
    - Name: `sql-dialect-fmt`
-4. Create an Azure DevOps Personal Access Token:
+4. Create an [Azure DevOps Personal Access Token](https://dev.azure.com/_usersSettings/tokens):
    - Organizations: `All accessible organizations`
    - Scope: `Marketplace (Manage)`
    - Expiration: choose the shortest value that is practical for this release account
@@ -58,8 +111,8 @@ Do not commit or paste the token into docs/issues/chat. The helper stores it as 
 
 ## Chrome Web Store Item
 
-1. Make sure the Google account has 2-step verification enabled.
-2. Open `https://chrome.google.com/webstore/developer/dashboard`.
+1. Make sure the Google account has [2-step verification](https://myaccount.google.com/signinoptions/two-step-verification) enabled.
+2. Open the [Chrome Web Store Developer Dashboard](https://chrome.google.com/webstore/developer/dashboard).
 3. Create the developer account if it does not exist yet.
 4. Create a new item by uploading:
 
@@ -134,10 +187,10 @@ customer SQL; use a tiny demo query such as `select 1 as id`.
 
 ## Chrome Web Store API Credentials
 
-1. Open `https://console.developers.google.com`.
+1. Open [Google Cloud project creation](https://console.cloud.google.com/projectcreate).
 2. Create or select a Google Cloud project for release automation.
-3. Search for `Chrome Web Store API` and enable it.
-4. Open `OAuth consent screen`.
+3. Open [Chrome Web Store API](https://console.cloud.google.com/apis/library/chromewebstore.googleapis.com) and enable it for the release automation project.
+4. Open [OAuth consent screen](https://console.cloud.google.com/apis/credentials/consent).
 5. Select `External`, then create the consent screen.
 6. Fill only the required app fields:
    - App name: `sql-dialect-fmt release automation`
@@ -145,7 +198,7 @@ customer SQL; use a tiny demo query such as `select 1 as id`.
    - Developer contact information: your release email
 7. Skip scopes.
 8. Add your own Google account as a test user.
-9. Open `Credentials`.
+9. Open [Credentials](https://console.cloud.google.com/apis/credentials).
 10. Create `OAuth client ID`.
 11. Application type: `Web application`.
 12. Name: `sql-dialect-fmt Chrome Web Store publisher`.
@@ -156,7 +209,7 @@ https://developers.google.com/oauthplayground
 ```
 
 14. Copy the client ID and client secret.
-15. Open `https://developers.google.com/oauthplayground`.
+15. Open [OAuth 2.0 Playground](https://developers.google.com/oauthplayground).
 16. Open the settings panel and enable `Use your own OAuth credentials`.
 17. Paste the client ID and client secret.
 18. In `Input your own scopes`, enter:
@@ -177,6 +230,11 @@ export CHROME_REFRESH_TOKEN='paste-refresh-token-here'
 ```
 
 ## Write GitHub Secrets And Variables
+
+Manual pages, if you ever want to inspect what the helper wrote:
+
+- [GitHub Actions variables](https://github.com/hjosugi/sql-dialect-fmt/settings/variables/actions)
+- [GitHub Actions secrets](https://github.com/hjosugi/sql-dialect-fmt/settings/secrets/actions)
 
 Run the helper once:
 
@@ -223,6 +281,8 @@ gh workflow run "Extension Packages" \
   -f publish_target=all
 ```
 
+The same run is visible at the [Extension Packages workflow page](https://github.com/hjosugi/sql-dialect-fmt/actions/workflows/extensions.yml).
+
 Watch it:
 
 ```sh
@@ -255,9 +315,9 @@ git push origin vX.Y.Z
 
 Use this before 2026-12-01 or immediately if the release account cannot use PATs.
 
-1. Create an Entra application or managed identity for GitHub Actions publishing.
+1. Create an [Entra application registration](https://entra.microsoft.com/#view/Microsoft_AAD_RegisteredApps/ApplicationsListBlade) or managed identity for GitHub Actions publishing.
 2. Add a federated credential for this GitHub repo and the release workflow.
-3. Add that identity to the Visual Studio Marketplace publisher with Contributor access.
+3. Add that identity to the [Visual Studio Marketplace publisher](https://marketplace.visualstudio.com/manage/publishers/sql-dialect-fmt) with Contributor access.
 4. Export:
 
 ```sh
@@ -291,7 +351,7 @@ After this, VS Code publishing uses `vsce publish --azure-credential` in GitHub 
 
 ## Official References
 
-- VS Code publishing: https://code.visualstudio.com/api/working-with-extensions/publishing-extension
-- VS Code Marketplace publisher management: https://marketplace.visualstudio.com/manage
-- Chrome Web Store API setup: https://developer.chrome.com/docs/webstore/using-api
-- Chrome Web Store dashboard: https://chrome.google.com/webstore/developer/dashboard
+- [VS Code publishing](https://code.visualstudio.com/api/working-with-extensions/publishing-extension)
+- [VS Code Marketplace publisher management](https://marketplace.visualstudio.com/manage)
+- [Chrome Web Store API setup](https://developer.chrome.com/docs/webstore/using-api)
+- [Chrome Web Store dashboard](https://chrome.google.com/webstore/developer/dashboard)
