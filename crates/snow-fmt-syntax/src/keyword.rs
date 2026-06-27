@@ -104,8 +104,12 @@ const KEYWORDS: &[(&str, SyntaxKind, KeywordDialect)] = {
         ("intersect", INTERSECT_KW, Shared),
         ("minus", MINUS_KW, Shared),
         ("distinct", DISTINCT_KW, Shared),
-        // QUALIFY: Snowflake clause; absent from the Spark keyword table.
-        ("qualify", QUALIFY_KW, SnowflakeOnly),
+        // QUALIFY: a window-filter clause in BOTH dialects. Databricks SQL supports `SELECT ...
+        // QUALIFY <predicate>` (Databricks Runtime 10.4 LTS+), so it must stay reserved under
+        // Databricks too — otherwise the parser treats it as a plain identifier and mis-splits the
+        // query. Reserving it in both dialects leaves Snowflake byte-identical (it was reserved
+        // there already).
+        ("qualify", QUALIFY_KW, Shared),
         ("over", OVER_KW, Shared),
         ("partition", PARTITION_KW, Shared),
         ("window", WINDOW_KW, Shared),
@@ -390,7 +394,6 @@ mod tests {
             "elseif",
             "cursor",
             "resultset",
-            "qualify",
             "connect",
             "prior",
             "top",

@@ -18,8 +18,9 @@ fn errors_for(sql: &str, dialect: Dialect) -> Vec<String> {
 #[test]
 fn snowflake_only_words_are_identifiers_under_databricks() {
     // The headline acceptance case: these Snowflake-only words are ordinary identifiers in
-    // Databricks, so the query parses with no diagnostics.
-    let sql = "SELECT task, flatten, warehouse, qualify FROM t";
+    // Databricks, so the query parses with no diagnostics. (Note: `QUALIFY` is *not* in this set —
+    // it is a shared window-filter clause kept reserved in both dialects.)
+    let sql = "SELECT task, flatten, warehouse, top FROM t";
     let errs = errors_for(sql, Dialect::Databricks);
     assert!(errs.is_empty(), "expected clean parse, got: {errs:?}");
 }
