@@ -29,6 +29,10 @@ pub enum Doc {
     Line(LineKind),
     /// A sequence of documents laid out one after another.
     Concat(Vec<Doc>),
+    /// Try candidate layouts in order and print the first one that fits on the current line; if no
+    /// candidate fits, print the last one. This is the small Doc-IR escape hatch used by Prettier /
+    /// Biome for constructs with genuinely different layouts rather than just flat-vs-break lines.
+    BestFitting(Vec<Doc>),
     /// A layout-choice boundary. Printed flat if it fits, otherwise broken. When `expand` is set
     /// the group always breaks (Prettier's `shouldBreak`) — used for "explode this collection"
     /// decisions like a magic trailing comma. Unlike a hard line, `expand` does **not** propagate
@@ -151,6 +155,12 @@ pub fn join(sep: Doc, items: Vec<Doc>) -> Doc {
     Doc::Concat(parts)
 }
 
+/// Try the candidate documents in order, printing the first that fits in the remaining width and
+/// falling back to the last candidate when none fit. Empty candidates render as empty.
+pub fn best_fitting(candidates: Vec<Doc>) -> Doc {
+    Doc::BestFitting(candidates)
+}
+
 // ---- printing ----
 
 /// Knobs for the printer. Opinionated by design: just a target width and an indent step.
@@ -238,6 +248,9 @@ fn has_forced_break(doc: &Doc) -> bool {
         // A line suffix's own content is deferred and must not force the current line to break.
         Doc::LineSuffix(_) => false,
         Doc::Concat(parts) => parts.iter().any(has_forced_break),
+        Doc::BestFitting(candidates) => {
+            !candidates.is_empty() && candidates.iter().all(has_forced_break)
+        }
         Doc::Indent(inner) => has_forced_break(inner),
         // An exploded group propagates to ancestors: a multiline collection can't sit inline, so
         // every group containing it must break too (cf. Black's magic trailing comma). The answer
@@ -276,6 +289,14 @@ fn fits(mut remaining: isize, rest: &[Cmd], next: Cmd, opts: &PrintOptions) -> b
             Doc::Concat(parts) => {
                 for part in parts.iter().rev() {
                     stack.push(Cmd { doc: part, ..cmd });
+                }
+            }
+            Doc::BestFitting(candidates) => {
+                if let Some(candidate) = candidates.first() {
+                    stack.push(Cmd {
+                        doc: candidate,
+                        ..cmd
+                    });
                 }
             }
             Doc::Indent(inner) => stack.push(Cmd {
@@ -350,6 +371,31 @@ pub fn print(doc: &Doc, opts: &PrintOptions) -> String {
                 for part in parts.iter().rev() {
                     cmds.push(Cmd { doc: part, ..cmd });
                 }
+            }
+            Doc::BestFitting(candidates) => {
+                if candidates.is_empty() {
+                    continue;
+                }
+                let mut chosen = candidates.last().expect("non-empty candidates");
+                for candidate in candidates {
+                    if fits(
+                        opts.line_width as isize - col as isize,
+                        &cmds,
+                        Cmd {
+                            indent: cmd.indent,
+                            mode: cmd.mode,
+                            doc: candidate,
+                        },
+                        opts,
+                    ) {
+                        chosen = candidate;
+                        break;
+                    }
+                }
+                cmds.push(Cmd {
+                    doc: chosen,
+                    ..cmd
+                });
             }
             Doc::LineSuffix(inner) => line_suffixes.push(Cmd { doc: inner, ..cmd }),
             Doc::BreakParent => {}
@@ -520,6 +566,24 @@ mod tests {
     fn join_interleaves_separator() {
         let doc = join(text(", "), vec![text("a"), text("b"), text("c")]);
         assert_eq!(p(&doc, 80), "a, b, c\n");
+    }
+
+    #[test]
+    fn best_fitting_picks_first_candidate_that_fits() {
+        let doc = best_fitting(vec![
+            text("short"),
+            concat(vec![text("fallback"), hard_line(), text("layout")]),
+        ]);
+        assert_eq!(p(&doc, 10), "short\n");
+    }
+
+    #[test]
+    fn best_fitting_falls_back_to_last_candidate() {
+        let doc = best_fitting(vec![
+            text("too-wide"),
+            concat(vec![text("fallback"), hard_line(), text("layout")]),
+        ]);
+        assert_eq!(p(&doc, 4), "fallback\nlayout\n");
     }
 
     #[test]
